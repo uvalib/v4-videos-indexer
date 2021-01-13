@@ -1,0 +1,16 @@
+#! /bin/bash
+# to_xml.sh
+# Program to convert Marc records to MarcXML
+
+E_BADARGS=65
+
+BASEBINDIR=$( (cd -P $(dirname $0) && pwd) )
+. $BASEBINDIR/outputfuncs.bash
+
+marc4j_jar=$( find_newest_file_matching_pattern_under_directory $BASEBINDIR "marc4j*.jar" )
+
+#echo "java -jar $marc4j_jar to_xml $* " 1>&2
+java -jar $marc4j_jar to_xml $* 
+
+exit 0
+

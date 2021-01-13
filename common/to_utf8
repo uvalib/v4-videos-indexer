@@ -1,0 +1,16 @@
+#! /bin/bash
+# to_utf8.sh
+# program to translate marc records to binary MARC records uning the UTF8 encoding.
+
+E_BADARGS=65
+
+BASEBINDIR=$( (cd -P $(dirname $0) && pwd) )
+. $BASEBINDIR/outputfuncs.bash 
+
+marc4j_jar=$( find_newest_file_matching_pattern_under_directory $BASEBINDIR "marc4j*.jar" )
+
+#echo "java -jar $marc4j_jar to_utf8 $* " 1>&2
+java -jar $marc4j_jar to_utf8 $* 
+
+exit 0
+
