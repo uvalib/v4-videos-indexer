@@ -1,0 +1,23 @@
+#! /bin/bash
+# to_marc8.sh
+# Diagnostic program to display marc records.
+# $Id: to_marc8.sh 
+
+E_BADARGS=65
+
+BASEBINDIR=$( (cd -P $(dirname $0) && pwd) )
+. $BASEBINDIR/outputfuncs.bash
+
+marc4j_jar=$( find_newest_file_matching_pattern_under_directory $BASEBINDIR "marc4j*.jar" )
+
+if [ $# -eq 0 ]
+then
+    echo "    Usage: `basename $0` ./path/to/marc.mrc ./path/to/marc.mrc " 1>&2
+    exit $E_BADARGS
+fi
+
+#echo "java -jar $marc4j_jar marcsort $* " 1>&2
+
+java -jar $marc4j_jar marcsort $*
+
+

@@ -1,0 +1,55 @@
+#!/bin/bash
+
+SCRIPTDIR=$( (cd -P $(dirname $0) && pwd) )
+corename=spreadsheet
+BASEDIR=$SCRIPTDIR/common
+
+# load the shared bash functions log, vlog and Verbose
+. $BASEDIR/outputfuncs.bash $BASEDIR
+
+verbose=
+force=
+test=
+index=staging:production
+while getopts :vfti: opt
+ do
+      case $opt in
+          v) verbose=-v;;
+          t) test=-t;;
+          f) force=-f;;
+          i) index=$OPTARG
+      esac
+done
+shift $((OPTIND-1))
+
+if [ "$force" == "-f" ] ; then
+    Verbose "Forcing index rebuild with -f flag"
+fi
+
+if [ "$AWS_ACCESS_KEY_ID" == "" ] ; then
+    Echo "environment variable AWS_ACCESS_KEY_ID must be defined"
+    exit 1
+fi
+if [ "$AWS_SECRET_ACCESS_KEY" == "" ] ; then
+    Echo "environment variable AWS_SECRET_ACCESS_KEY must be defined"
+    exit 1
+fi
+#if [ "$AWS_DEFAULT_REGION" == "" ] ; then
+#    Echo "environment variable AWS_DEFAULT_REGION must be defined"
+#    exit 1
+#fi
+if [ "$AWS_REGION" == "" ] ; then
+    Echo "environment variable AWS_REGION must be defined"
+    exit 1
+fi
+
+#mkdir -p $SCRIPTDIR/results
+
+Verbose " "
+Verbose "Starting update of Virgo4 index for Video items "`/bin/date "+%Y-%m-%d_%H:%M"`
+
+$SCRIPTDIR/kanopy/updateifnewer  $verbose $test $force -i $index
+
+$SCRIPTDIR/swank/updateifnewer $verbose $test $force -i $index
+
+Verbose "Finished update of Virgo4 index for Video items "`/bin/date "+%Y-%m-%d_%H:%M"`

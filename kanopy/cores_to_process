@@ -1,0 +1,2 @@
+staging|s3://virgo4-ingest-staging-inbound/dynamic_update/kanopy/YEAR|s3://virgo4-ingest-staging-inbound/doc-delete/default/2020|http://virgo4-solr-staging-replica-0-private.internal.lib.virginia.edu:8080/solr/test_core
+production|s3://virgo4-ingest-production-inbound/dynamic_update/kanopy/YEAR|s3://virgo4-ingest-production-inbound/doc-delete/default/2020|http://v4-solr-production-replica-0-private.internal.lib.virginia.edu:8080/solr/test_core

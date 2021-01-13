@@ -1,0 +1,167 @@
+#!/bin/bash
+
+SCRIPTDIR=$( (cd -P $(dirname $0) && pwd) )
+corename=kanopy
+DATADIR=${SCRIPTDIR}/data
+BASEDIR=$( dirname $SCRIPTDIR )
+COMMONDIR=${BASEDIR}/common
+
+
+# load the shared bash functions log, vlog and Verbose
+. $COMMONDIR/outputfuncs.bash 
+
+marc4j_jar=$( find_newest_file_matching_pattern_under_directory $COMMONDIR "marc4j*.jar" )
+
+verbose=
+force=
+test=
+index=staging:production
+while getopts :vfti: opt
+ do
+      case $opt in
+          v) verbose=-v;;
+          t) test=-t;;
+          f) force=-f;;
+          i) index=$OPTARG
+      esac
+done
+shift $((OPTIND-1))
+
+$SCRIPTDIR/getkanopyrecordsviacasperjs $verbose
+
+Verbose "unpack downloaded zip file"
+for file in `find $DATADIR/incoming_zip -type "f" -name "*.zip" `
+do
+    froot=`basename $file`
+    format=`file -b $file  | cut -d' ' -f1-3 `
+    if [[ "$format" == "Zip archive data," ]] ; then
+        Verbose "    Unpacking zipfile $froot"
+        unzip -u -q $DATADIR/incoming_zip/$froot -d $DATADIR/incoming
+    else
+        Echo "Error:  downloaded file not in .zip format -- it is: $(file -b $file)"
+    fi
+    mv  $DATADIR/incoming_zip/$froot $DATADIR/processed_zip
+done
+
+DATE=`date +%Y%m%d%H%M`
+YEAR=`date +%Y`
+
+mkdir -p $DATADIR/records
+mkdir -p $DATADIR/incoming_sorted
+mkdir -p $DATADIR/processed
+mkdir -p $DATADIR/updates_incoming
+touch $DATADIR/records/all_kanopy_records.mrc
+
+#Handle preparing these record for Virgo 4 and uploading them to Amazon S3 bucket
+cat $SCRIPTDIR/kanopy_shadowed_map.properties | egrep -v "^#" | egrep -v "DEFAULT" | tr "=" "|" > $DATADIR/kanopy_shadowed_map.map
+
+if [[ ! -s $DATADIR/records/all_kanopy_records_edited_bak.mrc ]] ; then
+    force=-f
+fi
+
+cp $DATADIR/records/all_kanopy_records.mrc $DATADIR/records/all_kanopy_records_bak.mrc
+cp $DATADIR/records/all_kanopy_records_edited.mrc $DATADIR/records/all_kanopy_records_edited_bak.mrc
+
+for file in `find $DATADIR/incoming -type f -name "*.mrc"`
+do
+    froot=`basename $file`
+    $COMMONDIR/marcsort -q $file > $DATADIR/incoming_sorted/$froot
+    rm $file
+    Verbose "    counting records in full dump and in update"
+    Verbose "    Replacing full record dump with contents of $froot"
+    cp $DATADIR/incoming_sorted/$froot $DATADIR/records/all_kanopy_records.mrc
+    mv $DATADIR/incoming_sorted/$froot $DATADIR/processed
+done 
+
+java -cp "$marc4j_jar:$COMMONDIR/fix_boundwith.jar" AddFieldToRecord -c utf8 -f 988 -s a  $DATADIR/records/all_kanopy_records.mrc $DATADIR/kanopy_shadowed_map.map | $COMMONDIR/to_xml -edit $SCRIPTDIR/video_recs_map.properties | sed -e 's/^\([ ]*<marc:leader>.....\)...\(.*\)/\1ngm\2/' | $COMMONDIR/to_utf8 > $DATADIR/records/all_kanopy_records_edited.mrc
+
+if [[ "$force" != "-f" ]] ; then
+    # Handle incremental updates.
+    Verbose "    Extracting changed records" 
+    $COMMONDIR/marcdiff -mrc2 $DATADIR/records/all_kanopy_records_edited_bak.mrc $DATADIR/records/all_kanopy_records_edited.mrc > $DATADIR/updates_incoming/new_$DATE.mrc
+
+    Verbose "    Checking for deleted records"
+    cat $DATADIR/records/all_kanopy_records_edited.mrc  | $COMMONDIR/getrecord -id > $DATADIR/records/all_kanopy_records.ids
+    cat $DATADIR/records/all_kanopy_records_edited_bak.mrc  | $COMMONDIR/getrecord -id > $DATADIR/records/all_kanopy_records_bak.ids
+
+    diff $DATADIR/records/all_kanopy_records_bak.ids $DATADIR/records/all_kanopy_records.ids | egrep '<' | cut -c 3- > $DATADIR/updates_incoming/deletes_$DATE.del
+
+    for line in `cat $SCRIPTDIR/cores_to_process`
+        do
+        solrname=`echo $line| cut -d '|' -f1`
+        mkdir -p $DATADIR/updates_${solrname}
+    
+        if [[ -s $DATADIR/updates_incoming/new_$DATE.mrc ]] ; then
+            cp $DATADIR/updates_incoming/new_$DATE.mrc $DATADIR/updates_${solrname}
+        fi
+        if [[ -s $DATADIR/updates_incoming/deletes_$DATE.del ]] ; then
+            cp $DATADIR/updates_incoming/deletes_$DATE.del $DATADIR/updates_${solrname}/deletes_$DATE.ids
+        fi
+    done
+
+    rm  $DATADIR/updates_incoming/new_$DATE.mrc
+    rm  $DATADIR/updates_incoming/deletes_$DATE.del
+fi
+
+for line in `cat $SCRIPTDIR/cores_to_process`
+do
+    solrname=`echo $line| cut -d '|' -f1`
+    update_bucket=`echo $line| cut -d '|' -f2 | sed -e "s/YEAR/$YEAR/"`
+    delete_bucket=`echo $line| cut -d '|' -f3 | sed -e "s/YEAR/$YEAR/"`
+    solrurl=`echo $line| cut -d '|' -f4`
+
+    if [[ "$index" =~ $solrname ]]; then
+        Verbose "    Checking whether any records need reindexing for index $solrname"
+        for update in `find $DATADIR/updates_$solrname -name "*.mrc" | sort`
+        do  
+            upname=`basename $update`
+            if [[ -s $update ]] ; then
+                if [[ "$test" != "-t" ]] ; then
+                    $AWS s3 cp $update ${update_bucket}/$upname 2>&1 | vlog "      "
+                    rm $update
+                else 
+                    Verbose "would upload $update to $solrname bucket"
+                fi
+            fi
+        done
+        for update in `find $DATADIR/updates_$solrname -name "*.ids" | sort`
+        do  
+            upname=`basename $update`
+            if [[ -s $update ]] ; then
+                if [[ "$test" != "-t" ]] ; then
+                    $AWS s3 cp $update ${delete_bucket}/$upname 2>&1 | vlog "      "
+                    rm $update
+                else 
+                    Verbose "would upload $update to $solrname delete bucket"
+                fi
+            fi
+        done
+        if [[ "$force" == "-f" ]] ; then
+            Verbose "Due to -f flag, Reindexing all records"
+            Verbose "First figure out if any records need to be deleted"
+            cat $DATADIR/records/all_kanopy_records_edited.mrc  | $COMMONDIR/getrecord -id | sort > $DATADIR/records/all_kanopy_records.ids
+            curl -s "$solrurl/select?fl=id&q=data_source_f%3A${corename}&rows=10000" | egrep '"id":' | sed -e 's/.*":"//' -e 's/".*$//' | sort  > $DATADIR/cur_ids_in_solr.ids
+            diff $DATADIR/cur_ids_in_solr.ids $DATADIR/records/all_kanopy_records.ids | egrep '<' | sed -e 's/< //' > $DATADIR/records_to_delete_${corename}_${solrname}.ids
+
+            if [ -s $DATADIR/records_to_delete_${corename}_${solrname}.ids ] ; then
+                Verbose "Some records in virgo solr that are not in the new dump of all records"
+                if [ "$test" != "-t" ]; then
+                    $AWS s3 cp $DATADIR/records_to_delete_${corename}_${solrname}.ids ${delete_bucket}/records_to_delete_${corename}_${solrname}.ids
+                else
+                    Echo "aws s3 cp $DATADIR/records_to_delete_${corename}_${solrname}.ids ${delete_bucket}/records_to_delete_${corename}_${solrname}.ids"
+                fi
+            else
+               Verbose "    No records need to be deleted"
+            fi
+
+            if [ "$test" != "-t" ]; then
+                $AWS s3 cp $DATADIR/records/all_kanopy_records_edited.mrc ${update_bucket}/all_kanopy_records_edited.mrc 2>&1 | vlog "      "
+            else 
+                Verbose "would upload $DATADIR/records/all_kanopy_records_edited.mrc to $solrname update bucket"
+            fi
+        fi
+    fi
+done
+
+Verbose "    Done updating core $corename"
+
