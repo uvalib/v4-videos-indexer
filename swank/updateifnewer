@@ -87,7 +87,7 @@ if [[ "$dropbox_file" != "" && -s "$dropbox_file" && "$dropbox_file" -nt "$lates
         if [[ "$index" =~ $solrname ]]; then
             Verbose "Checking for records to delete from Solr"
             cat $swank_currentdir/marc_record_export_edited_${EXPORT_DATE}.mrc| 
-                getrecord -id | sort -n |  sed -e 's/^/swank_/' > $swank_currentdir/swank_ids_in_dump.ids
+                $COMMONDIR/getrecord -id | sort -n |  sed -e 's/^/swank_/' > $swank_currentdir/swank_ids_in_dump.ids
 
             curl -s "${solrurl}/select?fl=id&q=data_source_f:swank&defType=lucene&rows=1000" | 
                 egrep '"id":' | sed -e 's/.*:"//' -e 's/".*$//' | sort -n > $swank_currentdir/swank_ids_in_${solrname}_solr.ids
