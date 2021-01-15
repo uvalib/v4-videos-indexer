@@ -27,6 +27,14 @@ while getopts :vfti: opt
 done
 shift $((OPTIND-1))
 
+mkdir -p $DATADIR/records
+mkdir -p $DATADIR/incoming_zip
+mkdir -p $DATADIR/incoming
+mkdir -p $DATADIR/processed_zip
+mkdir -p $DATADIR/incoming_sorted
+mkdir -p $DATADIR/processed
+mkdir -p $DATADIR/updates_incoming
+
 $SCRIPTDIR/getkanopyrecordsviacasperjs $verbose
 
 Verbose "unpack downloaded zip file"
@@ -46,11 +54,8 @@ done
 DATE=`date +%Y%m%d%H%M`
 YEAR=`date +%Y`
 
-mkdir -p $DATADIR/records
-mkdir -p $DATADIR/incoming_sorted
-mkdir -p $DATADIR/processed
-mkdir -p $DATADIR/updates_incoming
 touch $DATADIR/records/all_kanopy_records.mrc
+touch $DATADIR/records/all_kanopy_records_edited.mrc
 
 #Handle preparing these record for Virgo 4 and uploading them to Amazon S3 bucket
 cat $SCRIPTDIR/kanopy_shadowed_map.properties | egrep -v "^#" | egrep -v "DEFAULT" | tr "=" "|" > $DATADIR/kanopy_shadowed_map.map
@@ -111,32 +116,33 @@ do
     solrurl=`echo $line| cut -d '|' -f4`
 
     if [[ "$index" =~ $solrname ]]; then
-        Verbose "    Checking whether any records need reindexing for index $solrname"
-        for update in `find $DATADIR/updates_$solrname -name "*.mrc" | sort`
-        do  
-            upname=`basename $update`
-            if [[ -s $update ]] ; then
-                if [[ "$test" != "-t" ]] ; then
-                    $AWS s3 cp $update ${update_bucket}/$upname 2>&1 | vlog "      "
-                    rm $update
-                else 
-                    Verbose "would upload $update to $solrname bucket"
+        if [[ "$force" != "-f" ]] ; then
+            Verbose "    Checking whether any records need reindexing for index $solrname"
+            for update in `find $DATADIR/updates_$solrname -name "*.mrc" | sort`
+            do  
+                upname=`basename $update`
+                if [[ -s $update ]] ; then
+                    if [[ "$test" != "-t" ]] ; then
+                        $AWS s3 cp $update ${update_bucket}/$upname 2>&1 | vlog "      "
+                        rm $update
+                    else 
+                        Verbose "would upload $update to $solrname bucket"
+                    fi
                 fi
-            fi
-        done
-        for update in `find $DATADIR/updates_$solrname -name "*.ids" | sort`
-        do  
-            upname=`basename $update`
-            if [[ -s $update ]] ; then
-                if [[ "$test" != "-t" ]] ; then
-                    $AWS s3 cp $update ${delete_bucket}/$upname 2>&1 | vlog "      "
-                    rm $update
-                else 
-                    Verbose "would upload $update to $solrname delete bucket"
+            done
+            for update in `find $DATADIR/updates_$solrname -name "*.ids" | sort`
+            do  
+                upname=`basename $update`
+                if [[ -s $update ]] ; then
+                    if [[ "$test" != "-t" ]] ; then
+                        $AWS s3 cp $update ${delete_bucket}/$upname 2>&1 | vlog "      "
+                        rm $update
+                    else 
+                        Verbose "would upload $update to $solrname delete bucket"
+                    fi
                 fi
-            fi
-        done
-        if [[ "$force" == "-f" ]] ; then
+            done
+        else
             Verbose "Due to -f flag, Reindexing all records"
             Verbose "First figure out if any records need to be deleted"
             cat $DATADIR/records/all_kanopy_records_edited.mrc  | $COMMONDIR/getrecord -id | sort > $DATADIR/records/all_kanopy_records.ids

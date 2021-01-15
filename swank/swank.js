@@ -15,7 +15,7 @@ var pass = system.args[2];
 function loginFillForm(status) {
     if (status === "success"){
         console.log('rendering page');
-        page.render("../data/swank_login_page.png");
+        page.render("data/swank_login_page.png");
         console.log('rendered page');
         console.log('set on load finished');
         page.onLoadFinished = loginResponse;
@@ -35,14 +35,14 @@ function loginFillForm(status) {
 
 function loginResponse() {
     console.log('rendering page after submit');
-    page.render("../data/swank_after_submit.png");
+    page.render("data/swank_after_submit.png");
     page.onLoadFinished = null;
     page.open(contentmanager, dodownloadall);
 }
 
 function dodownloadall() {
     console.log('submitting download all request');
-    page.render("../data/swank_contentmanager_page.png");
+    page.render("data/swank_contentmanager_page.png");
     console.log('exiting');
         phantom.exit();
 }

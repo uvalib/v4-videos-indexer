@@ -34,7 +34,7 @@ casper.start(loginurl, function openLoginPage() {
 
 // Second step  Wait for login form to exist and then fill it in
 casper.waitForSelector('form#user-login', function fillInForm(){
-    this.page.render("../data/kanopy_login_page.png");
+    this.page.render("data/kanopy_login_page.png");
     this.fill('form#user-login', {
             'name' : userid,
             'pass' : pass
@@ -53,13 +53,13 @@ casper.then(function() {
 // Fourth step  Wait for Admin page to load
 casper.waitForUrl(landing, function waitForAdminPage(){
     this.log(this.getTitle(), 'info');
-    this.page.render("../data/kanopy_after_submit.png");
+    this.page.render("data/kanopy_after_submit.png");
 });
 
 // Fifth step  Navigate to Marc Record download page
 casper.thenOpen(mrpageurl, function openMarcRecordPage(){
     this.log(this.getTitle(), 'info');
-    this.page.render("../data/kanopy_download_page.png");
+    this.page.render("data/kanopy_download_page.png");
 });
 
 // Sixth step  Click the Download All Button
