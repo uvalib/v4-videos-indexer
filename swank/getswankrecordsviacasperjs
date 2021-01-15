@@ -39,7 +39,7 @@ if [[ "$force" == "-f" && -e $DATADIR/swank/swank_casper_${DATE}.mrc ]] ; then
     rm -f $DATADIR/swank/swank_casper_${DATE}.mrc
 fi
 
- #$SCRIPTDIR/bin/casperjs --log-level=info --verbose --web-security=no casper_swank.js uva16 Admin001 ../data/swank/swank_casper_${DATE}.csv ../data/swank/swank_casper_${DATE}.mrc
+ #$SCRIPTDIR/bin/casperjs --log-level=info --verbose --web-security=no casper_swank.js uva16 Admin001 data/swank/swank_casper_${DATE}.csv data/swank/swank_casper_${DATE}.mrc
 
 tries=0
 done=0
