@@ -44,7 +44,7 @@ do
     format=`file -b $file  | cut -d' ' -f1-3 `
     if [[ "$format" == "Zip archive data," ]] ; then
         Verbose "    Unpacking zipfile $froot"
-        unzip -u -q $DATADIR/incoming_zip/$froot -d $DATADIR/incoming
+        unzip -o -q $DATADIR/incoming_zip/$froot -d $DATADIR/incoming
     else
         Echo "Error:  downloaded file not in .zip format -- it is: $(file -b $file)"
     fi
