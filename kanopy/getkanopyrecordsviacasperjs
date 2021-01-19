@@ -28,7 +28,7 @@ mkdir -p $DATADIR/processed_zip
 
 date=`date "+%Y-%m-%d"`
 kanopy_filename="Kanopy_MARC_Records__virginia.kanopystreaming.com__${date}.zip"
-export PHANTOMJS_EXECUTABLE=$COMMONDIR/phantomjs
+export PHANTOMJS_EXECUTABLE=phantomjs
 CASPERJS_PARMS="--web-security=no --verbose --log-level=info"
 
 if [[ "$force" == "-f" && -e $DATADIR/incoming_zip/$kanopy_filename ]] ; then
