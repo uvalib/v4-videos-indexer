@@ -123,7 +123,7 @@ do
                 upname=`basename $update`
                 if [[ -s $update ]] ; then
                     if [[ "$test" != "-t" ]] ; then
-                        $AWS s3 cp $update ${update_bucket}/$upname 2>&1 | vlog "      "
+                        aws s3 cp $update ${update_bucket}/$upname 2>&1 | vlog "      "
                         rm $update
                     else 
                         Verbose "would upload $update to $solrname bucket"
@@ -135,7 +135,7 @@ do
                 upname=`basename $update`
                 if [[ -s $update ]] ; then
                     if [[ "$test" != "-t" ]] ; then
-                        $AWS s3 cp $update ${delete_bucket}/$upname 2>&1 | vlog "      "
+                        aws s3 cp $update ${delete_bucket}/$upname 2>&1 | vlog "      "
                         rm $update
                     else 
                         Verbose "would upload $update to $solrname delete bucket"
@@ -152,7 +152,7 @@ do
             if [ -s $DATADIR/records_to_delete_${corename}_${solrname}.ids ] ; then
                 Verbose "Some records in virgo solr that are not in the new dump of all records"
                 if [ "$test" != "-t" ]; then
-                    $AWS s3 cp $DATADIR/records_to_delete_${corename}_${solrname}.ids ${delete_bucket}/records_to_delete_${corename}_${solrname}.ids
+                    aws s3 cp $DATADIR/records_to_delete_${corename}_${solrname}.ids ${delete_bucket}/records_to_delete_${corename}_${solrname}.ids
                 else
                     Echo "aws s3 cp $DATADIR/records_to_delete_${corename}_${solrname}.ids ${delete_bucket}/records_to_delete_${corename}_${solrname}.ids"
                 fi
@@ -161,7 +161,7 @@ do
             fi
 
             if [ "$test" != "-t" ]; then
-                $AWS s3 cp $DATADIR/records/all_kanopy_records_edited.mrc ${update_bucket}/all_kanopy_records_edited.mrc 2>&1 | vlog "      "
+                aws s3 cp $DATADIR/records/all_kanopy_records_edited.mrc ${update_bucket}/all_kanopy_records_edited.mrc 2>&1 | vlog "      "
             else 
                 Verbose "would upload $DATADIR/records/all_kanopy_records_edited.mrc to $solrname update bucket"
             fi

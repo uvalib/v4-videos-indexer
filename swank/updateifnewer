@@ -98,11 +98,11 @@ if [[ "$dropbox_file" != "" && -s "$dropbox_file" && "$dropbox_file" -nt "$lates
             if [[ "$test" != "-t" ]] ; then 
                 if [[ -s $swank_currentdir/swank_ids_to_delete_from_${solrname}_solr.ids ]] ; then
                     Verbose "Delete older records from Solr"
-                    $AWS s3 cp  $swank_currentdir/swank_ids_to_delete_from_${solrname}_solr.ids  ${delete_bucket}/swank_ids_to_delete_from_${solrname}_solr.ids  2>&1 | vlog "      "
+                    aws s3 cp  $swank_currentdir/swank_ids_to_delete_from_${solrname}_solr.ids  ${delete_bucket}/swank_ids_to_delete_from_${solrname}_solr.ids  2>&1 | vlog "      "
                 fi
 
                 Verbose "Uploading to S3 bucket for Virgo4"
-                $AWS s3 cp  $swank_currentdir/marc_record_export_edited_${EXPORT_DATE}.mrc  ${update_bucket}/marc_record_export_edited_${EXPORT_DATE}.mrc 2>&1 | vlog "      "
+                aws s3 cp  $swank_currentdir/marc_record_export_edited_${EXPORT_DATE}.mrc  ${update_bucket}/marc_record_export_edited_${EXPORT_DATE}.mrc 2>&1 | vlog "      "
             else 
                 if [[ -s $swank_currentdir/swank_ids_to_delete_from_${solrname}_solr.ids ]] ; then
                     Echo "would upload $swank_currentdir/swank_ids_to_delete_from_${solrname}_solr.ids to ${delete_bucket}"
