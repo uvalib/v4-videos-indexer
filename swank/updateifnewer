@@ -11,8 +11,6 @@ COMMONDIR=${BASEDIR}/common
 
 marc4j_jar=$( find_newest_file_matching_pattern_under_directory $COMMONDIR "marc4j*.jar" )
 
-DROPBOX_DIR=/lib_content30/Metadata_dropbox/swank/
-
 verbose=
 force=
 test=
@@ -31,17 +29,43 @@ shift $((OPTIND-1))
 DATE=`date +%Y%m%d`
 YEAR=`date +%Y`
 
-#$SCRIPTDIR/getswankrecordsviacasperjs $verbose $force
-swank_currentdir=$DATADIR/swank/unzip
-swank_prevdir=$DATADIR/swank/prev_unzip
-latest_file=$DATADIR/swank/digital_campus-content_export.zip
-#dropbox_file=$DROPBOX_DIR/digital_campus-content_export.zip
-dropbox_file=$( find_newest_file_matching_pattern_under_directory $DROPBOX_DIR "*.zip" )
-mkdir -p $swank_currentdir
-mkdir -p $swank_prevdir
+mkdir -p $DATADIR/incoming
+mkdir -p $DATADIR/screenshots
+mkdir -p $DATADIR/combined
+mkdir -p $DATADIR/tmp
+if [[ ! -d $COMMONDIR/node_modules ]] ; then
+    Echo "Node modules not installed in common directory.  Exiting"
+    exit 1
+fi
 
-if [[ ! -s "$latest_file" ]] ; then
-    touch -d "A year ago" "$latest_file"
+if [[ ! -d $SCRIPTDIR/node_modules || ! -L $SCRIPTDIR/node_modules ]] ; then
+   ln -s $COMMONDIR/node_modules $SCRIPTDIR/node_modules
+fi
+
+if [[ ! -f $COMMONDIR/package-lock.json ]] ; then
+    Echo "package-lock not installed in common directory.  Exiting"
+    exit 1
+fi
+
+if [[ ! -f $SCRIPTDIR/package-lock.json || ! -L $SCRIPTDIR/package-lock.json ]] ; then
+   ln -s $COMMONDIR/package-lock.json $SCRIPTDIR/package-lock.json
+fi
+
+if [[ "$test" == "-t" ]] ; then testpat="*"; else testpat=""; fi;
+
+Verbose "Fetching records from SWANK website"
+$SCRIPTDIR/getswankrecordsviapuppeteer $verbose $force
+if [[ "$?" != "0" ]]; then
+    Echo "Script to fetch records returned error, exiting"
+    exit 1
+fi
+
+combined_dir=$DATADIR/combined
+latest_mrc_file=$( find_newest_file_matching_pattern_under_directory $DATADIR/incoming "*.mrc" )
+latest_csv_file=$( find_newest_file_matching_pattern_under_directory $DATADIR/incoming "*.csv" )
+
+if [[ ! -s "$latest_mrc_file" ]] ; then
+    touch -d "A year ago" "$latest_mrc_file"
 fi
 
 if [[ "$force" == "-f" ]] ; then
@@ -49,33 +73,17 @@ if [[ "$force" == "-f" ]] ; then
     touch -d "A year ago" "$latest_file"
 fi
 
-if [[ "$dropbox_file" != "" && -s "$dropbox_file" && "$dropbox_file" -nt "$latest_file" ]] ; then
-    Verbose "New file found in dropbox: $dropbox_file"
-    Verbose "backing up most recent files"
-    #rm $swank_prevdir/*
-    mv -f $swank_currentdir/* $swank_prevdir 2> /dev/null
-    Verbose "unzipping and renaming latest files"
-    unzip $dropbox_file  -d $swank_currentdir
-    chmod 644 $swank_currentdir/*
-
-    EXPORT_DATE=`ls $swank_currentdir/marc_record_export[-_][0-9]*.mrc | tail -1 | sed -e 's/.*marc_record_export[-_]//' -e 's/.mrc//'`
-    mv $swank_currentdir/digcampus_export.csv $swank_currentdir/digcampus_export_${EXPORT_DATE}.csv
-    mv $swank_currentdir/marc_record_export-${EXPORT_DATE}.mrc  $swank_currentdir/marc_record_export_${EXPORT_DATE}.mrc 
+if [[ "$latest_mrc_file" != "" && -s "$latest_mrc_file" ]] ; then
+    Verbose "New file downloaded: $latest_mrc_file"
 
     Verbose "making .TSV file from .CSV file"
     # process the downloaded csv file to create a tab separated file to use in shadowing records for which the license has expired
-    egrep -v '^Title'  $swank_currentdir/digcampus_export_${EXPORT_DATE}.csv | cut -d ',' -f 5 | sed -e 's#.*/en/##' -e 's/small.jpg.*//' -e 's/[-_][0-9]*//' > $swank_currentdir/swank_ids_${EXPORT_DATE}.txt
-    egrep -v '^Title' $swank_currentdir/digcampus_export_${EXPORT_DATE}.csv  | cut -d ',' -f 1,7 | tr ',' '\t' | paste $swank_currentdir/swank_ids_${EXPORT_DATE}.txt - > $swank_currentdir/swank_${EXPORT_DATE}.tsv
-
-    # link the generic files to the more recent one
-    ln -sf $swank_currentdir/marc_record_export_${EXPORT_DATE}.mrc $DATADIR/swank/swank_casper.mrc
-    ln -sf $swank_currentdir/swank_${EXPORT_DATE}.tsv $DATADIR/swank/swank_casper.tsv
-    
-    # process the tab separated file and the set of marc records to create a set of records that contains the license expiration date 
-    # for use in Virgo 4 
-    cat $swank_currentdir/swank_${EXPORT_DATE}.tsv | cut -f 1,3 | tr '/' '\t' | awk '{printf "%s|%4d%02d%02d\n", $1, $4, $2, $3 }' > $swank_currentdir/swank_casper_${EXPORT_DATE}.date
-    java -cp "$marc4j_jar:$COMMONDIR/fix_boundwith.jar" AddFieldToRecord -c utf8 -f 988 -s a  $swank_currentdir/marc_record_export_${EXPORT_DATE}.mrc $swank_currentdir/swank_casper_${EXPORT_DATE}.date > $swank_currentdir/marc_record_export_edited_${EXPORT_DATE}.mrc
-
+    latest_ids_file=`echo $latest_csv_file | sed -e 's/.csv$/.ids/'`
+    latest_tsv_file=`echo $latest_csv_file | sed -e 's/.csv$/.tsv/'`
+    latest_dates_file=`echo $latest_csv_file | sed -e 's/.csv$/.date/'`
+    egrep -v '^Title'  $latest_csv_file | cut -d ',' -f 5 | sed -e 's#.*/en/##' -e 's/small.jpg.*//' -e 's/[-_][0-9]*//' > $latest_ids_file
+    egrep -v '^Title' $latest_csv_file | cut -d ',' -f 1,7 | tr ',' '\t' | paste $latest_ids_file - > $latest_tsv_file
+    cat $latest_tsv_file | cut -f 1,3 | tr '/' '\t' | awk '{printf "%s|%4d%02d%02d\n", $1, $4, $2, $3 }' > $latest_dates_file
 
     for line in `cat $SCRIPTDIR/cores_to_process`
     do
@@ -86,35 +94,45 @@ if [[ "$dropbox_file" != "" && -s "$dropbox_file" && "$dropbox_file" -nt "$lates
 
         if [[ "$index" =~ $solrname ]]; then
             Verbose "Checking for records to delete from Solr"
-            cat $swank_currentdir/marc_record_export_edited_${EXPORT_DATE}.mrc| 
-                $COMMONDIR/getrecord -id | sort -n |  sed -e 's/^/swank_/' > $swank_currentdir/swank_ids_in_dump.ids
+            # process the tab separated file and the set of marc records to create a set of records that contains the license expiration date 
+            # for use in Virgo 4 
+            previous_combined_file=$( find_newest_file_matching_pattern_under_directory $DATADIR/combined "*_${solrname}${testpat}.mrc" )
+            latest_combined_file=`echo $latest_mrc_file | sed -e 's/incoming/combined/' -e "s/.mrc/_${solrname}${test}.mrc/"`
+            #echo "java -cp \"$marc4j_jar:$COMMONDIR/fix_boundwith.jar\" AddFieldToRecord -c utf8 -f 988 -s a  $latest_mrc_file $latest_dates_file > $latest_combined_file"
+            java -cp "$marc4j_jar:$COMMONDIR/fix_boundwith.jar" AddFieldToRecord -c utf8 -f 988 -s a  $latest_mrc_file $latest_dates_file > $latest_combined_file
+            cat $latest_combined_file | 
+                $COMMONDIR/getrecord -id | sort -n |  sed -e 's/^/swank_/' > $combined_dir/swank_ids_in_dump.ids
 
             curl -s "${solrurl}/select?fl=id&q=data_source_f:swank&defType=lucene&rows=1000" | 
-                egrep '"id":' | sed -e 's/.*:"//' -e 's/".*$//' | sort -n > $swank_currentdir/swank_ids_in_${solrname}_solr.ids
+                egrep '"id":' | sed -e 's/.*:"//' -e 's/".*$//' | sort -n > $combined_dir/swank_ids_in_${solrname}_solr.ids
 
-            diff $swank_currentdir/swank_ids_in_dump.ids $swank_currentdir/swank_ids_in_${solrname}_solr.ids | 
-                egrep '>' | sed -e 's/> //' > $swank_currentdir/swank_ids_to_delete_from_${solrname}_solr.ids
+            diff $combined_dir/swank_ids_in_dump.ids $combined_dir/swank_ids_in_${solrname}_solr.ids | 
+                egrep '>' | sed -e 's/> //' > $combined_dir/swank_ids_to_delete_from_${solrname}_solr.ids
 
             if [[ "$test" != "-t" ]] ; then 
-                if [[ -s $swank_currentdir/swank_ids_to_delete_from_${solrname}_solr.ids ]] ; then
+                if [[ -s $combined_dir/swank_ids_to_delete_from_${solrname}_solr.ids ]] ; then
                     Verbose "Delete older records from Solr"
-                    aws s3 cp  $swank_currentdir/swank_ids_to_delete_from_${solrname}_solr.ids  ${delete_bucket}/swank_ids_to_delete_from_${solrname}_solr.ids  2>&1 | vlog "      "
+                    aws s3 cp  $combined_dir/swank_ids_to_delete_from_${solrname}_solr.ids  ${delete_bucket}/swank_ids_to_delete_from_${solrname}_solr.ids  2>&1 | vlog "      "
                 fi
 
-                Verbose "Uploading to S3 bucket for Virgo4"
-                aws s3 cp  $swank_currentdir/marc_record_export_edited_${EXPORT_DATE}.mrc  ${update_bucket}/marc_record_export_edited_${EXPORT_DATE}.mrc 2>&1 | vlog "      "
+                if [[ "$previous_combined_file" == "" ]]; then previous_combined_file="/dev/null"; fi
+                Verbose "Calling   cmp -s $latest_combined_file $previous_combined_file "
+                cmp -s "$latest_combined_file" "$previous_combined_file"
+                if [[ "$?" != "0" ]] ; then
+                    Verbose "Uploading to S3 bucket for Virgo4"
+                    aws s3 cp  $latest_combined_file  ${update_bucket}/marc_record_export_edited_${DATE}.mrc 2>&1 | vlog "      "
+                fi
             else 
-                if [[ -s $swank_currentdir/swank_ids_to_delete_from_${solrname}_solr.ids ]] ; then
-                    Echo "would upload $swank_currentdir/swank_ids_to_delete_from_${solrname}_solr.ids to ${delete_bucket}"
+                if [[ -s $combined_dir/swank_ids_to_delete_from_${solrname}_solr.ids ]] ; then
+                    Echo "would upload $combined_dir/swank_ids_to_delete_from_${solrname}_solr.ids to ${delete_bucket}"
                 fi
-                Echo "would upload $swank_currentdir/marc_record_export_edited_${EXPORT_DATE}.mrc to ${update_bucket}"
+                if [[ "$previous_combined_file" == "" ]]; then previous_combined_file="/dev/null"; fi
+                Verbose "Calling   cmp -s $latest_combined_file $previous_combined_file "
+                cmp -s "$latest_combined_file" "$previous_combined_file"
+                if [[ "$?" != "0" ]] ; then
+                    Echo "would upload $latest_combined_file to ${update_bucket}"
+                fi
             fi
-        fi
-
-
-        if [[ "$test" != "-t" ]] ; then 
-            Verbose "Copying Dropbox file to \"Latest\" file"
-            cp $dropbox_file $latest_file 
         fi
     done
 else

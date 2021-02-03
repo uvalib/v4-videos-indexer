@@ -1,0 +1,69 @@
+#!/bin/bash
+
+SCRIPTDIR=$( (cd -P $(dirname $0) && pwd) )
+corename=swank
+DATADIR=${SCRIPTDIR}/data
+BASEDIR=$( dirname $SCRIPTDIR )
+COMMONDIR=${BASEDIR}/common
+
+# load the shared bash functions log, vlog and Verbose
+. $COMMONDIR/outputfuncs.bash
+
+verbose=
+force=
+test=
+while getopts :vfti: opt
+ do
+      case $opt in
+          v) verbose=-v;;
+          t) test=-t;;
+          f) force=-f;;
+      esac
+done
+shift $((OPTIND-1))
+
+
+DATE=`TZ='America/New_York' date "+%Y%m%d"`
+
+if [[ "$force" == "-f" && -e $DATADIR/incoming/swank_nodejs_${DATE}.csv ]] ; then
+    rm -f $DATADIR/incoming/swank_nodejs_${DATE}.csv
+fi
+
+if [[ "$force" == "-f" && -e $DATADIR/incoming/swank_nodejs_${DATE}.mrc ]] ; then
+    rm -f $DATADIR/incoming/swank_nodejs_${DATE}.mrc
+fi
+
+# node swank_node_puppeteer.js -v --user=uva16 --pass=Admin001 --dir=./data --csv=swank_nodejs_${DATE}.csv --marc=swank_nodejs_${DATE}.mrc
+
+
+tries=0
+done=0
+if [[ ! -e  $DATADIR/incoming/swank_nodejs_${DATE}.csv || ! -e  $DATADIR/incoming/swank_nodejs_${DATE}.mrc ]] ; then
+    while [[ "$done" == 0 && "$tries" < 3 ]]; do
+        rm -rf $DATADIR/.config/Default/
+        rm -f $DATADIR/tmp/*
+        rm -f $DATADIR/incoming/swank_nodejs_${DATE}.csv $DATADIR/incoming/swank_nodejs_${DATE}.mrc
+        Verbose "Running Puppeteer/NodeJS to login and trigger download"
+        node swank_node_puppeteer.js -v --user=uva16 --pass=Admin001 --dir=./data --csv=swank_nodejs_${DATE}.csv --marc=swank_nodejs_${DATE}.mrc | vlog "    nodeJS: "
+
+        filesize=`du -b $DATADIR/incoming/swank_nodejs_${DATE}.mrc | cut -d $'\t' -f 1`
+        Verbose "  Retrieved file size: $filesize"
+        if [[ "$filesize" -lt 300000 ]]; then
+            let tries=$tries+1
+            if [[ $tries -lt 3 ]] ; then
+                Verbose "  File size too small, trying again"
+            else
+                Verbose "  File size still too small giving up. Better luck tomorrow."
+            fi
+        else
+            Verbose "  File size big enough, moving on."
+            done=1
+        fi
+    done
+else
+    Verbose " Files $DATADIR/incoming/swank_nodejs_${DATE}.csv and  $DATADIR/incoming/swank_nodejs_${DATE}.mrc already in incoming data directory"
+    done=1
+fi
+
+if [[ "$done" == 1 ]] ; then exit_code=0; else exit_code=1; fi;
+exit $exit_code
