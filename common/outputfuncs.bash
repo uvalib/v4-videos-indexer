@@ -1,7 +1,8 @@
 
 #define the function
+#xargs -0 ls -1 -t % 2> /dev/null | head -1
 find_newest_file_matching_pattern_under_directory(){
-    echo $(find $1 -maxdepth 1 -name "$2" -print0 | xargs -0 ls -1 -t | head -1)
+    echo $(find $1 -maxdepth 1 -name "$2" -print0 | xargs -0 ls -1 -t % 2> /dev/null | head -1)
 }
 
 verbose=
