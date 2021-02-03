@@ -34,14 +34,39 @@ mkdir -p $DATADIR/processed_zip
 mkdir -p $DATADIR/incoming_sorted
 mkdir -p $DATADIR/processed
 mkdir -p $DATADIR/updates_incoming
+if [[ ! -d $COMMONDIR/node_modules ]] ; then
+    Echo "Node modules not installed in common directory.  Exiting"
+    exit 1
+fi
 
-$SCRIPTDIR/getkanopyrecordsviacasperjs $verbose
+if [[ ! -d $SCRIPTDIR/node_modules || ! -L $SCRIPTDIR/node_modules ]] ; then  
+   ln -s $COMMONDIR/node_modules $SCRIPTDIR/node_modules
+fi
+
+if [[ ! -f $COMMONDIR/package.json ]] ; then
+    Echo "package.json not installed in common directory.  Exiting"
+    exit 1
+fi
+
+if [[ ! -f $COMMONDIR/package-lock.json ]] ; then
+    Echo "package-lock.json not installed in common directory.  Exiting"
+    exit 1
+fi
+
+Verbose "Calling script to download latest records from Website"
+$SCRIPTDIR/getkanopyrecordsviapuppeteer $verbose $force
+if [[ "$?" != "0" ]]; then
+    Echo "Script to fetch records returned error, exiting"
+    exit 1
+fi
 
 Verbose "unpack downloaded zip file"
-for file in `find $DATADIR/incoming_zip -type "f" -name "*.zip" `
-do
-    froot=`basename $file`
-    format=`file -b $file  | cut -d' ' -f1-3 `
+latest_zip_file=$( find_newest_file_matching_pattern_under_directory $DATADIR/incoming_zip "Kanopy_MARC*.zip" )
+Verbose "latest file is $latest_zip_file"
+
+if [[ "$latest_zip_file" != "" ]]; then
+    froot=`basename $latest_zip_file`
+    format=`file -b $latest_zip_file  | cut -d' ' -f1-3 `
     if [[ "$format" == "Zip archive data," ]] ; then
         Verbose "    Unpacking zipfile $froot"
         unzip -o -q $DATADIR/incoming_zip/$froot -d $DATADIR/incoming
@@ -49,7 +74,10 @@ do
         Echo "Error:  downloaded file not in .zip format -- it is: $(file -b $file)"
     fi
     mv  $DATADIR/incoming_zip/$froot $DATADIR/processed_zip
-done
+else
+    Echo "No new zip file downloaded, nothing to do.  Exiting"
+    exit 0
+fi
 
 DATE=`date +%Y%m%d%H%M`
 YEAR=`date +%Y`
@@ -117,7 +145,7 @@ do
 
     if [[ "$index" =~ $solrname ]]; then
         if [[ "$force" != "-f" ]] ; then
-            Verbose "    Checking whether any records need reindexing for index $solrname"
+            Verbose "    Checking whether any records eeed reindexing for index $solrname"
             for update in `find $DATADIR/updates_$solrname -name "*.mrc" | sort`
             do  
                 upname=`basename $update`
@@ -154,7 +182,7 @@ do
                 if [ "$test" != "-t" ]; then
                     aws s3 cp $DATADIR/records_to_delete_${corename}_${solrname}.ids ${delete_bucket}/records_to_delete_${corename}_${solrname}.ids
                 else
-                    Echo "aws s3 cp $DATADIR/records_to_delete_${corename}_${solrname}.ids ${delete_bucket}/records_to_delete_${corename}_${solrname}.ids"
+                    Echo "would upload $DATADIR/records_to_delete_${corename}_${solrname}.ids to ${delete_bucket}"
                 fi
             else
                Verbose "    No records need to be deleted"
@@ -163,7 +191,7 @@ do
             if [ "$test" != "-t" ]; then
                 aws s3 cp $DATADIR/records/all_kanopy_records_edited.mrc ${update_bucket}/all_kanopy_records_edited.mrc 2>&1 | vlog "      "
             else 
-                Verbose "would upload $DATADIR/records/all_kanopy_records_edited.mrc to $solrname update bucket"
+                Echo "would upload $DATADIR/records/all_kanopy_records_edited.mrc to $update_bucket"
             fi
         fi
     fi
