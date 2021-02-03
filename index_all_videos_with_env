@@ -1,7 +1,7 @@
 #!/bin/bash
 
 SCRIPTDIR=$( (cd -P $(dirname $0) && pwd) )
-corename=spreadsheet
+corename=videos
 BASEDIR=$SCRIPTDIR/common
 
 # load the shared bash functions log, vlog and Verbose
