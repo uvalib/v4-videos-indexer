@@ -1,0 +1,70 @@
+#!/bin/bash
+
+SCRIPTDIR=$( (cd -P $(dirname $0) && pwd) )
+corename=kanopy
+DATADIR=${SCRIPTDIR}/data
+BASEDIR=$( dirname $SCRIPTDIR )
+COMMONDIR=${BASEDIR}/common
+
+# load the shared bash functions log, vlog and Verbose
+. $COMMONDIR/outputfuncs.bash 
+
+verbose=
+force=
+test=
+while getopts :vfti: opt
+ do
+      case $opt in
+          v) verbose=-v;;
+          t) test=-t;;
+          f) force=-f;;
+      esac
+done
+shift $((OPTIND-1))
+
+mkdir -p $DATADIR/incoming_zip
+mkdir -p $DATADIR/processed_zip
+
+DATE=`TZ='America/New_York' date "+%Y%m%d"`
+kanopy_filename="Kanopy_MARC_Records__virginia.kanopystreaming.com__${DATE}.zip"
+
+if [[ "$force" == "-f" && -e $DATADIR/incoming_zip/$kanopy_filename ]] ; then
+    rm -f $DATADIR/incoming_zip/$kanopy_filename
+fi
+
+if [[ "$force" == "-f" && -e $DATADIR/processed_zip/$kanopy_filename ]] ; then
+    rm -f $DATADIR/processed_zip/$kanopy_filename
+fi
+
+tries=0
+done=0
+if [[ ! -e $DATADIR/incoming_zip/$kanopy_filename && ! -e $DATADIR/processed_zip/$kanopy_filename ]] ; then
+    while [[ "$done" == 0 && "$tries" < 3 ]]; do
+        rm -rf $DATADIR/.config/Default/
+        rm -f $DATADIR/tmp/*
+        rm -f $DATADIR/incoming_zip/$kanopy_filename
+
+        Verbose "Running Puppeteer/NodeJS to login and trigger download"
+        node kanopy_node_puppeteer.js -v --user=virginia --pass=virginia235 --dir=./data --file=$kanopy_filename | vlog "    nodeJS: "
+        filesize=`du -b $DATADIR/incoming_zip/$kanopy_filename | cut -d $'\t' -f 1`
+        Verbose "  Retrieved file size: $filesize"
+        if [[ "$filesize" -lt 150000 ]]; then
+            let tries=$tries+1
+            if [[ $tries -lt 3 ]] ; then
+                Verbose "  File size too small, trying again"
+            else
+                Verbose "  File size still too small giving up. Better luck tomorrow."
+            fi
+        else
+            Verbose "  File size big enough, moving on."
+            done=1
+        fi
+    done
+else
+    Verbose " File $kanopy_filename already in incoming_zip directory or processed_zip directory"
+    done=1
+fi
+
+if [[ "$done" == 1 ]] ; then exit_code=0; else exit_code=1; fi;
+exit $exit_code
+
