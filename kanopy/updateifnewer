@@ -48,7 +48,7 @@ if [[ ! -f $COMMONDIR/package-lock.json ]] ; then
     exit 1
 fi
 
-diff --normal $SCRIPTDIR/cores_to_process $SCRIPTDIR/cores_to_process 2>@1 > /dev/null
+diff --normal $SCRIPTDIR/cores_to_process $SCRIPTDIR/cores_to_process 2> /dev/null > /dev/null
 if [[ $? != 0 ]] ; then
 Verbose "Running Busybox, diff is different"
 diff_flag=
