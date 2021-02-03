@@ -42,13 +42,14 @@ if [[ ! -d $SCRIPTDIR/node_modules || ! -L $SCRIPTDIR/node_modules ]] ; then
    ln -s $COMMONDIR/node_modules $SCRIPTDIR/node_modules
 fi
 
-if [[ ! -f $COMMONDIR/package-lock.json ]] ; then
-    Echo "package-lock not installed in common directory.  Exiting"
+if [[ ! -f $COMMONDIR/package.json ]] ; then
+    Echo "package.json not installed in common directory.  Exiting"
     exit 1
 fi
 
-if [[ ! -f $SCRIPTDIR/package-lock.json || ! -L $SCRIPTDIR/package-lock.json ]] ; then
-   ln -s $COMMONDIR/package-lock.json $SCRIPTDIR/package-lock.json
+if [[ ! -f $COMMONDIR/package-lock.json ]] ; then
+    Echo "package-lock.json not installed in common directory.  Exiting"
+    exit 1
 fi
 
 if [[ "$test" == "-t" ]] ; then testpat="*"; else testpat=""; fi;
