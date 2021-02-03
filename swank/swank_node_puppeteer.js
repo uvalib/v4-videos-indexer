@@ -43,7 +43,7 @@ const save_as_csv = `${datadir}/incoming/${args.csv}`;
 const save_as_marc = `${datadir}/incoming/${args.marc}`;
 
 async function getRecords() {
-  const browser = await puppeteer.launch({userDataDir:'./data/.config'});
+  const browser = await puppeteer.launch({userDataDir:`${datadir}/.config'});
   const page = await browser.newPage();
   await page.setViewport({width: 1200, height: 1000})
   await Promise.all([

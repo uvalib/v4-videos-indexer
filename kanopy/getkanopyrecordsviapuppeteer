@@ -45,7 +45,7 @@ if [[ ! -e $DATADIR/incoming_zip/$kanopy_filename && ! -e $DATADIR/processed_zip
         rm -f $DATADIR/incoming_zip/$kanopy_filename
 
         Verbose "Running Puppeteer/NodeJS to login and trigger download"
-        node kanopy_node_puppeteer.js -v --user=virginia --pass=virginia235 --dir=./data --file=$kanopy_filename | vlog "    nodeJS: "
+        node $SCRIPTDIR/kanopy_node_puppeteer.js -v --user=virginia --pass=virginia235 --dir=$DATADIR --file=$kanopy_filename | vlog "    nodeJS: "
         filesize=`du -b $DATADIR/incoming_zip/$kanopy_filename | cut -d $'\t' -f 1`
         Verbose "  Retrieved file size: $filesize"
         if [[ "$filesize" -lt 150000 ]]; then

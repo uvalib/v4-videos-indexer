@@ -44,7 +44,7 @@ if [[ ! -e  $DATADIR/incoming/swank_nodejs_${DATE}.csv || ! -e  $DATADIR/incomin
         rm -f $DATADIR/tmp/*
         rm -f $DATADIR/incoming/swank_nodejs_${DATE}.csv $DATADIR/incoming/swank_nodejs_${DATE}.mrc
         Verbose "Running Puppeteer/NodeJS to login and trigger download"
-        node swank_node_puppeteer.js -v --user=uva16 --pass=Admin001 --dir=./data --csv=swank_nodejs_${DATE}.csv --marc=swank_nodejs_${DATE}.mrc | vlog "    nodeJS: "
+        node $SCRIPTDIR/swank_node_puppeteer.js -v --user=uva16 --pass=Admin001 --dir=$DATADIR --csv=swank_nodejs_${DATE}.csv --marc=swank_nodejs_${DATE}.mrc | vlog "    nodeJS: "
 
         filesize=`du -b $DATADIR/incoming/swank_nodejs_${DATE}.mrc | cut -d $'\t' -f 1`
         Verbose "  Retrieved file size: $filesize"
