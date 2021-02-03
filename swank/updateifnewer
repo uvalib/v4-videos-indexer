@@ -42,11 +42,6 @@ if [[ ! -d $SCRIPTDIR/node_modules || ! -L $SCRIPTDIR/node_modules ]] ; then
    ln -s $COMMONDIR/node_modules $SCRIPTDIR/node_modules
 fi
 
-if [[ ! -f $COMMONDIR/package.json ]] ; then
-    Echo "package.json not installed in common directory.  Exiting"
-    exit 1
-fi
-
 if [[ ! -f $COMMONDIR/package-lock.json ]] ; then
     Echo "package-lock.json not installed in common directory.  Exiting"
     exit 1
