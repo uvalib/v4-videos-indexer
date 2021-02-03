@@ -48,7 +48,7 @@ const filename = args.file;
 const save_as_zip = `${incoming_dir}/${args.file}`;
 
 async function getRecords() {
-  const browser = await puppeteer.launch({userDataDir:'./data/.config'});
+  const browser = await puppeteer.launch({userDataDir:`${datadir}/.config'});
   const page = await browser.newPage();
   await page.setViewport({width: 1200, height: 1000})
   await Promise.all([

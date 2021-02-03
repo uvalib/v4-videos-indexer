@@ -34,6 +34,7 @@ mkdir -p $DATADIR/processed_zip
 mkdir -p $DATADIR/incoming_sorted
 mkdir -p $DATADIR/processed
 mkdir -p $DATADIR/updates_incoming
+mkdir -p $DATADIR/screenshots
 if [[ ! -d $COMMONDIR/node_modules ]] ; then
     Echo "Node modules not installed in common directory.  Exiting"
     exit 1
