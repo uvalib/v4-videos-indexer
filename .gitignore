@@ -1,3 +1,7 @@
 kanopy/data
 swank/data
-data
+common/node_modules
+common/package.json
+common/package-lock.json
+kanopy/node_modules
+swank/node_modules
