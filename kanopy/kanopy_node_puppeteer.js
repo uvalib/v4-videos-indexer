@@ -35,7 +35,7 @@ const creds = {
 };
 const datadir = args.dir ? args.dir : "./data";
 if (verbose) console.log(creds);
-const filename_zip = `Kanopy_MARC_Records__additions__virginia.zip`; // args.marc
+const filename_zip = 'Kanopy_MARC_Records__additions__virginia.zip'; // args.marc
 const save_dir = `${datadir}/tmp`;
 const incoming_dir = `${datadir}/incoming_zip`;
 const screenshot_dir = `${datadir}/screenshots`;
@@ -43,12 +43,13 @@ const screenshot_dir = `${datadir}/screenshots`;
 const loginurl = "https://virginia.kanopy.com/login";
 const landing = "https://virginia.kanopy.com";
 const mrpageurl = "https://virginia.kanopy.com/user/2049/mr";
+console.log(`screenshot dir = ${screenshot_dir}`);
 
 const filename = args.file;
 const save_as_zip = `${incoming_dir}/${args.file}`;
 
 async function getRecords() {
-  const browser = await puppeteer.launch({userDataDir:`${datadir}/.config'});
+  const browser = await puppeteer.launch({userDataDir:`${datadir}/.config`});
   const page = await browser.newPage();
   await page.setViewport({width: 1200, height: 1000})
   await Promise.all([

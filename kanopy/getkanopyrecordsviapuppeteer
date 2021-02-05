@@ -24,6 +24,8 @@ shift $((OPTIND-1))
 
 mkdir -p $DATADIR/incoming_zip
 mkdir -p $DATADIR/processed_zip
+mkdir -p $DATADIR/tmp
+mkdir -p $DATADIR/screenshots
 
 DATE=`TZ='America/New_York' date "+%Y%m%d"`
 kanopy_filename="Kanopy_MARC_Records__virginia.kanopystreaming.com__${DATE}.zip"
