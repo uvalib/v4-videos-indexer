@@ -35,19 +35,19 @@ mkdir -p $DATADIR/incoming_sorted
 mkdir -p $DATADIR/processed
 mkdir -p $DATADIR/updates_incoming
 mkdir -p $DATADIR/screenshots
-if [[ ! -d $COMMONDIR/node_modules ]] ; then
-    Echo "Node modules not installed in common directory.  Exiting"
-    exit 1
-fi
+#if [[ ! -d $COMMONDIR/node_modules ]] ; then
+#    Echo "Node modules not installed in common directory.  Exiting"
+#    exit 1
+#fi
 
-if [[ ! -d $SCRIPTDIR/node_modules || ! -L $SCRIPTDIR/node_modules ]] ; then  
-   ln -s $COMMONDIR/node_modules $SCRIPTDIR/node_modules
-fi
+#if [[ ! -d $SCRIPTDIR/node_modules || ! -L $SCRIPTDIR/node_modules ]] ; then  
+#   ln -s $COMMONDIR/node_modules $SCRIPTDIR/node_modules
+#fi
 
-if [[ ! -f $COMMONDIR/package-lock.json ]] ; then
-    Echo "package-lock.json not installed in common directory.  Exiting"
-    exit 1
-fi
+#if [[ ! -f $COMMONDIR/package-lock.json ]] ; then
+#    Echo "package-lock.json not installed in common directory.  Exiting"
+#    exit 1
+#fi
 
 diff --normal $SCRIPTDIR/cores_to_process $SCRIPTDIR/cores_to_process 2> /dev/null > /dev/null
 if [[ $? != 0 ]] ; then

@@ -33,19 +33,19 @@ mkdir -p $DATADIR/incoming
 mkdir -p $DATADIR/screenshots
 mkdir -p $DATADIR/combined
 mkdir -p $DATADIR/tmp
-if [[ ! -d $COMMONDIR/node_modules ]] ; then
-    Echo "Node modules not installed in common directory.  Exiting"
-    exit 1
-fi
+#if [[ ! -d $COMMONDIR/node_modules ]] ; then
+#    Echo "Node modules not installed in common directory.  Exiting"
+#    exit 1
+#fi
 
-if [[ ! -d $SCRIPTDIR/node_modules || ! -L $SCRIPTDIR/node_modules ]] ; then
-   ln -s $COMMONDIR/node_modules $SCRIPTDIR/node_modules
-fi
+#if [[ ! -d $SCRIPTDIR/node_modules || ! -L $SCRIPTDIR/node_modules ]] ; then
+#   ln -s $COMMONDIR/node_modules $SCRIPTDIR/node_modules
+#fi
 
-if [[ ! -f $COMMONDIR/package-lock.json ]] ; then
-    Echo "package-lock.json not installed in common directory.  Exiting"
-    exit 1
-fi
+#if [[ ! -f $COMMONDIR/package-lock.json ]] ; then
+#    Echo "package-lock.json not installed in common directory.  Exiting"
+#    exit 1
+#fi
 
 if [[ "$test" == "-t" ]] ; then testpat="*"; else testpat=""; fi;
 
