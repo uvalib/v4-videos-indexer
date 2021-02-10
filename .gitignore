@@ -6,3 +6,4 @@ common/package-lock.json
 kanopy/node_modules
 swank/node_modules
 tmp
+package/scripts
