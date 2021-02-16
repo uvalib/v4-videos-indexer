@@ -43,6 +43,7 @@ const save_as_csv = `${datadir}/incoming/${args.csv}`;
 const save_as_marc = `${datadir}/incoming/${args.marc}`;
 
 async function getRecords() {
+try {
   const browser = await puppeteer.launch({userDataDir:`${datadir}/.config`});
   const page = await browser.newPage();
   await page.setViewport({width: 1200, height: 1000})
@@ -156,6 +157,18 @@ async function getRecords() {
   }); 
 
   browser.close();
-}
+} // end try
+catch (err) {
+  console.log("Error caught!!");
+  //console.log(err);
+  if (typeof myVar !== 'undefined' && browser != null) {
+    browser.close();
+  }
+  process.exitCode = 1;
+  console.log("Error re-thrown");
+  throw(err);
+} // end catch
+};
 
-getRecords();
+getRecords().then( () => process.exit(0)).catch( (err) => { console.log(err); process.exit(1) });
+

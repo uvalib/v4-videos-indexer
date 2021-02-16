@@ -48,18 +48,29 @@ if [[ ! -e $DATADIR/incoming_zip/$kanopy_filename && ! -e $DATADIR/processed_zip
 
         Verbose "Running Puppeteer/NodeJS to login and trigger download"
         node $SCRIPTDIR/kanopy_node_puppeteer.js -v --user=virginia --pass=virginia235 --dir=$DATADIR --file=$kanopy_filename | vlog "    nodeJS: "
-        filesize=`du -b $DATADIR/incoming_zip/$kanopy_filename | cut -d $'\t' -f 1`
-        Verbose "  Retrieved file size: $filesize"
-        if [[ "$filesize" -lt 150000 ]]; then
-            let tries=$tries+1
-            if [[ $tries -lt 3 ]] ; then
-                Verbose "  File size too small, trying again"
+        returncode=${PIPESTATUS[0]}
+        if [[ $returncode == 0 ]] ; then
+            filesize=`du -b $DATADIR/incoming_zip/$kanopy_filename | cut -d $'\t' -f 1`
+            Verbose "  Retrieved file size: $filesize"
+            if [[ "$filesize" -lt 150000 ]]; then
+                let tries=$tries+1
+                if [[ $tries -lt 3 ]] ; then
+                    Verbose "  File size too small, trying again"
+                else
+                    Verbose "  File size still too small giving up. Better luck tomorrow."
+                fi
             else
-                Verbose "  File size still too small giving up. Better luck tomorrow."
+                Verbose "  File size big enough, moving on."
+                done=1
             fi
         else
-            Verbose "  File size big enough, moving on."
-            done=1
+            Verbose "  Non-zero exit code from nodeJS script"
+            let tries=$tries+1
+            if [[ $tries -lt 3 ]] ; then
+                Verbose "  Non-zero exit code from nodeJS script, trying again"
+            else
+                Verbose "  Non-zero exit code from nodeJS script giving up. Better luck tomorrow."
+            fi
         fi
     done
 else

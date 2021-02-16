@@ -40,24 +40,34 @@ tries=0
 done=0
 if [[ ! -e  $DATADIR/incoming/swank_nodejs_${DATE}.csv || ! -e  $DATADIR/incoming/swank_nodejs_${DATE}.mrc ]] ; then
     while [[ "$done" == 0 && "$tries" < 3 ]]; do
-        rm -rf $DATADIR/.config/Default/
+        #rm -rf $DATADIR/.config/Default/
         rm -f $DATADIR/tmp/*
         rm -f $DATADIR/incoming/swank_nodejs_${DATE}.csv $DATADIR/incoming/swank_nodejs_${DATE}.mrc
         Verbose "Running Puppeteer/NodeJS to login and trigger download"
         node $SCRIPTDIR/swank_node_puppeteer.js -v --user=uva16 --pass=Admin001 --dir=$DATADIR --csv=swank_nodejs_${DATE}.csv --marc=swank_nodejs_${DATE}.mrc | vlog "    nodeJS: "
-
-        filesize=`du -b $DATADIR/incoming/swank_nodejs_${DATE}.mrc | cut -d $'\t' -f 1`
-        Verbose "  Retrieved file size: $filesize"
-        if [[ "$filesize" -lt 300000 ]]; then
-            let tries=$tries+1
-            if [[ $tries -lt 3 ]] ; then
-                Verbose "  File size too small, trying again"
+        returncode=${PIPESTATUS[0]}
+        if [[ $returncode == 0 ]] ; then
+            filesize=`du -b $DATADIR/incoming/swank_nodejs_${DATE}.mrc | cut -d $'\t' -f 1`
+            Verbose "  Retrieved file size: $filesize"
+            if [[ "$filesize" -lt 300000 ]]; then
+                let tries=$tries+1
+                if [[ $tries -lt 3 ]] ; then
+                    Verbose "  File size too small, trying again"
+                else
+                    Verbose "  File size still too small giving up. Better luck tomorrow."
+                fi
             else
-                Verbose "  File size still too small giving up. Better luck tomorrow."
+                Verbose "  File size big enough, moving on."
+                done=1
             fi
         else
-            Verbose "  File size big enough, moving on."
-            done=1
+            Verbose "  Non-zero exit code from nodeJS script"
+            let tries=$tries+1
+            if [[ $tries -lt 3 ]] ; then
+                Verbose "  Non-zero exit code from nodeJS script, trying again"
+            else
+                Verbose "  Non-zero exit code from nodeJS script giving up. Better luck tomorrow."
+            fi
         fi
     done
 else
