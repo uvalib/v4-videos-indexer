@@ -15,11 +15,13 @@ marc4j_jar=$( find_newest_file_matching_pattern_under_directory $COMMONDIR "marc
 verbose=
 force=
 test=
+skip=
 index=staging:production
-while getopts :vfti: opt
+while getopts :vsfti: opt
  do
       case $opt in
           v) verbose=-v;;
+          s) skip=-s;;
           t) test=-t;;
           f) force=-f;;
           i) index=$OPTARG
@@ -58,27 +60,31 @@ Verbose "Not running Busybox, all is well"
 diff_flag=-u
 fi
 
-Verbose "Calling script to download latest records from Website"
-$SCRIPTDIR/getkanopyrecordsviapuppeteer $verbose $force
-if [[ "$?" != "0" ]]; then
-    Echo "Script to fetch records returned error, exiting"
-    exit 1
-fi
+if [[ "$skip" != "-s" ]] ; then
+    Verbose "Calling script to download latest records from Website"
+    $SCRIPTDIR/getkanopyrecordsviapuppeteer $verbose $force
+    if [[ "$?" != "0" ]]; then
+        Echo "Script to fetch records returned error, exiting"
+        exit 1
+    fi
+else
+    Verbose "Skipping script to download latest records from website"
+fi 
 
 Verbose "unpack downloaded zip file"
 latest_zip_file=$( find_newest_file_matching_pattern_under_directory $DATADIR/incoming_zip "Kanopy_MARC*.zip" )
 Verbose "latest file is $latest_zip_file"
 
 if [[ "$latest_zip_file" != "" ]]; then
-    froot=`basename $latest_zip_file`
-    format=`file -b $latest_zip_file  | cut -d' ' -f1-3 `
+    froot=`basename "$latest_zip_file"`
+    format=`file -b "$latest_zip_file"  | cut -d' ' -f1-3 `
     if [[ "$format" == "Zip archive data," ]] ; then
         Verbose "    Unpacking zipfile $froot"
-        unzip -o -q $DATADIR/incoming_zip/$froot -d $DATADIR/incoming
+        unzip -o -q "$DATADIR/incoming_zip/$froot" -d $DATADIR/incoming
     else
         Echo "Error:  downloaded file not in .zip format -- it is: $(file -b $file)"
     fi
-    mv  $DATADIR/incoming_zip/$froot $DATADIR/processed_zip
+    mv  "$DATADIR/incoming_zip/$froot" $DATADIR/processed_zip
 else
     Echo "No new zip file downloaded, nothing to do.  Exiting"
     exit 0
