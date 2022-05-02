@@ -1,4 +1,3 @@
-#!/bin/bash
 
 SCRIPTDIR=$( (cd -P $(dirname $0) && pwd) )
 corename=kanopy
@@ -15,13 +14,13 @@ marc4j_jar=$( find_newest_file_matching_pattern_under_directory $COMMONDIR "marc
 verbose=
 force=
 test=
-skip=
+screenscrape=
 index=staging:production
 while getopts :vsfti: opt
  do
       case $opt in
           v) verbose=-v;;
-          s) skip=-s;;
+          s) screenscrape=-s;;
           t) test=-t;;
           f) force=-f;;
           i) index=$OPTARG
@@ -60,7 +59,7 @@ Verbose "Not running Busybox, all is well"
 diff_flag=-u
 fi
 
-if [[ "$skip" != "-s" ]] ; then
+if [[ "$screenscrape" == "-s" ]] ; then
     Verbose "Calling script to download latest records from Website"
     $SCRIPTDIR/getkanopyrecordsviapuppeteer $verbose $force
     if [[ "$?" != "0" ]]; then
@@ -70,6 +69,31 @@ if [[ "$skip" != "-s" ]] ; then
 else
     Verbose "Skipping script to download latest records from website"
 fi 
+
+BUCKET="s3://virgo4-ingest-raw-upload-production/kanopy"
+KEY=`aws s3 ls $BUCKET --recursive 2> /dev/null | sort | tail -n 1 | sed -e 's#.*kanopy/##' `
+
+if [[ "$KEY" != "" ]] ; then
+    Verbose "Downloading latest file from AWS bucket $BUCKET"
+    aws s3 cp "$BUCKET/" $DATADIR/incoming_zip/ --recursive --exclude "*" --include "$KEY" 2> /dev/null
+    Verbose "Checking whether it has been processed already"
+    alreadydone=0
+    for file in `find $DATADIR/processed_zip -name "*.zip"` 
+    do 
+        cmp -s "$file" "$DATADIR/incoming_zip/$KEY"
+        return=$?
+        if [[ $? == "0" ]] ; then  
+            alreadydone=1
+        fi
+    done
+    if [[ "$alreadydone" == "1" ]] ; then 
+        Verbose "Downloaded file already processed"
+        rm "$DATADIR/incoming_zip/$KEY"
+        exit 0
+    else 
+        Verbose "Downloaded file needs to be processed"
+    fi
+fi
 
 Verbose "unpack downloaded zip file"
 latest_zip_file=$( find_newest_file_matching_pattern_under_directory $DATADIR/incoming_zip "Kanopy_MARC*.zip" )
@@ -167,13 +191,13 @@ do
 
     if [[ "$index" =~ $solrname ]]; then
         if [[ "$force" != "-f" ]] ; then
-            Verbose "    Checking whether any records eeed reindexing for index $solrname"
+            Verbose "    Checking whether any records need reindexing for index $solrname"
             for update in `find $DATADIR/updates_$solrname -name "*.mrc" | sort`
             do  
                 upname=`basename $update`
                 if [[ -s $update ]] ; then
                     if [[ "$test" != "-t" ]] ; then
-                        aws s3 cp $update ${update_bucket}/$upname 2>&1 | vlog "      "
+                        aws s3 cp $update ${update_bucket}/$upname 2>/dev/null | vlog "      "
                         rm $update
                     else 
                         Verbose "would upload $update to $solrname bucket"
@@ -185,7 +209,7 @@ do
                 upname=`basename $update`
                 if [[ -s $update ]] ; then
                     if [[ "$test" != "-t" ]] ; then
-                        aws s3 cp $update ${delete_bucket}/$upname 2>&1 | vlog "      "
+                        aws s3 cp $update ${delete_bucket}/$upname 2>/dev/null | vlog "      "
                         rm $update
                     else 
                         Verbose "would upload $update to $solrname delete bucket"
@@ -202,7 +226,7 @@ do
             if [ -s $DATADIR/records_to_delete_${corename}_${solrname}.ids ] ; then
                 Verbose "Some records in virgo solr that are not in the new dump of all records"
                 if [ "$test" != "-t" ]; then
-                    aws s3 cp $DATADIR/records_to_delete_${corename}_${solrname}.ids ${delete_bucket}/records_to_delete_${corename}_${solrname}.ids
+                    aws s3 cp $DATADIR/records_to_delete_${corename}_${solrname}.ids ${delete_bucket}/records_to_delete_${corename}_${solrname}.ids 2>/dev/null | vlog "      "
                 else
                     Echo "would upload $DATADIR/records_to_delete_${corename}_${solrname}.ids to ${delete_bucket}"
                 fi
@@ -211,7 +235,7 @@ do
             fi
 
             if [ "$test" != "-t" ]; then
-                aws s3 cp $DATADIR/records/all_kanopy_records_edited.mrc ${update_bucket}/all_kanopy_records_edited.mrc 2>&1 | vlog "      "
+                aws s3 cp $DATADIR/records/all_kanopy_records_edited.mrc ${update_bucket}/all_kanopy_records_edited.mrc 2>/dev/null | vlog "      "
             else 
                 Echo "would upload $DATADIR/records/all_kanopy_records_edited.mrc to $update_bucket"
             fi
