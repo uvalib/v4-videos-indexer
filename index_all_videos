@@ -30,7 +30,21 @@ Verbose " "
 Verbose "Starting update of Virgo4 index for Video items "`/bin/date "+%Y-%m-%d_%H:%M"`
 
 $SCRIPTDIR/kanopy/updateifnewer  $verbose $test $force -i $index
+resultkanopy=$?
 
 $SCRIPTDIR/swank/updateifnewer $verbose $test $force -i $index
+resultswank=$?
 
 Verbose "Finished update of Virgo4 index for Video items "`/bin/date "+%Y-%m-%d_%H:%M"`
+
+if [[ "$resultkanopy" == "0" && "$resultswank" == "0" ]] ; then
+    exit 0
+else
+    if [[ "$resultkanopy" != "0" ]] ; then 
+        Echo "FAILURE on update of Virgo4 index for kanopy video items"
+    fi
+    if [[ "$resultswank" != "0" ]] ; then 
+        Echo "FAILURE on update of Virgo4 index for swank video items"
+    fi
+    exit 1
+fi
