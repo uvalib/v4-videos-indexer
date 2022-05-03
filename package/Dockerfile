@@ -28,7 +28,7 @@ RUN chown -R docker:sse $NODE_PATH
 USER docker
 
 # from: https://github.com/puppeteer/puppeteer/blob/main/docs/troubleshooting.md#running-puppeteer-in-docker
-ENV SB=$NODE_PATH/puppeteer/.local-chromium/linux-848005/chrome-linux/chrome_sandbox
+ENV SB=$NODE_PATH/puppeteer/.local-chromium/linux-982053/chrome-linux/chrome_sandbox
 RUN sudo chown root:root $SB && sudo chmod 4755 $SB && sudo cp -p $SB /usr/local/sbin/chrome-devel-sandbox
 ENV CHROME_DEVEL_SANDBOX=/usr/local/sbin/chrome-devel-sandbox
 
