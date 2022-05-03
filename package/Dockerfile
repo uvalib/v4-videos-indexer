@@ -1,7 +1,7 @@
 #
 # build the target container
 #
-FROM centos:7
+FROM public.ecr.aws/docker/library/centos:centos7.9.2009
 
 # update the packages
 RUN yum -y update && yum -y install curl
