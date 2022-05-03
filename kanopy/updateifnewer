@@ -82,7 +82,7 @@ if [[ "$KEY" != "" ]] ; then
     do 
         cmp -s "$file" "$DATADIR/incoming_zip/$KEY"
         return=$?
-        if [[ $? == "0" ]] ; then  
+        if [[ $return == "0" ]] ; then  
             alreadydone=1
         fi
     done
