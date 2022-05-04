@@ -26,6 +26,25 @@ function getArgs () {
   return args;
 }
 
+async function waitFile (filename) {
+
+    return new Promise(async (resolve, reject) => {
+        if (!fs.existsSync(filename)) {
+            await delay(3000);    
+            await waitFile(filename);
+            resolve();
+        }else{
+          resolve();
+        }
+    })   
+}
+
+function delay(time) {
+    return new Promise(function(resolve) { 
+        setTimeout(resolve, time)
+    });
+}
+
 const args = getArgs();
 const verbose = args.v ? true : false;
 if (verbose) console.log(args);
@@ -118,17 +137,17 @@ try {
   // Download and wait for download
   await Promise.all([
     page.click('button.mat-menu-item:nth-child(2)'),
-    page.waitForTimeout(25000),
+    page.waitForTimeout(45000),
     // Event on all responses
     page.on('response', function getResponse(response) {
-      //if (verbose) console.log(response);
+      // if (verbose) console.log(response);
       filepath = `${save_dir}/${filename_marc}`;
       if (verbose) console.log(`expecting file ${filename_marc}`);
       // If response has a file on it
       if (response._headers['content-disposition'].includes('attachment') &&
           response._headers['content-disposition'].includes(`filename=${filename_marc}`)) {
         // Get the size
-        if (verbose) console.log('Size del header: ', response._headers['content-length']);
+        if (verbose) console.log('Size MARC header: ', response._headers['content-length']);
         if (response._headers['content-length'] !== undefined) {
           // Watch event on download folder or file
           fs.watchFile(filepath, function watch(curr, prev) {
@@ -136,6 +155,19 @@ try {
             if (parseInt(curr.size) === parseInt(response._headers['content-length'])) {
               fs.unwatchFile(filepath, watch);
               page.removeListener('response', getResponse);
+            }
+          });
+        }
+        else {
+          fs.watchFile(filepath, function watch(curr, prev) {
+            // If current size eq to size from response then close
+            if (parseInt(curr.size) !== 0 && parseInt(curr.size) === parseInt(prev.size)) {
+              fs.unwatchFile(filepath, watch);
+              page.removeListener('response', getResponse);
+            }
+            else {
+              if (verbose) console.log(' -- snooze -- ');
+              page.waitForTimeout(3000);
             }
           });
         }
