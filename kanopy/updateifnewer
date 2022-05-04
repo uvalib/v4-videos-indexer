@@ -58,13 +58,15 @@ else
 Verbose "Not running Busybox, all is well"
 diff_flag=-u
 fi
+download_failed=0
 
 if [[ "$screenscrape" == "-s" ]] ; then
     Verbose "Calling script to download latest records from Website"
     $SCRIPTDIR/getkanopyrecordsviapuppeteer $verbose $force
     if [[ "$?" != "0" ]]; then
         Echo "Script to fetch records returned error, exiting"
-        exit 1
+        Echo "Proceeding forward and checking for manually downloaded files"
+        download_failed=1
     fi
 else
     Verbose "Skipping script to download latest records from website"
@@ -73,6 +75,7 @@ fi
 BUCKET="s3://virgo4-ingest-raw-upload-production/kanopy"
 KEY=`aws s3 ls $BUCKET --recursive 2> /dev/null | sort | tail -n 1 | sed -e 's#.*kanopy/##' `
 
+nothing_new=0
 if [[ "$KEY" != "" ]] ; then
     Verbose "Downloading latest file from AWS bucket $BUCKET"
     aws s3 cp "$BUCKET/" $DATADIR/incoming_zip/ --recursive --exclude "*" --include "$KEY" 2> /dev/null
@@ -89,10 +92,20 @@ if [[ "$KEY" != "" ]] ; then
     if [[ "$alreadydone" == "1" ]] ; then 
         Verbose "Downloaded file already processed"
         rm "$DATADIR/incoming_zip/$KEY"
-        exit 0
+        nothing_new=1
     else 
         Verbose "Downloaded file needs to be processed"
     fi
+fi
+
+if [[ "$KEY" == "" && "$download_failed" == "1" ]] ; then 
+    Echo "No manually downloaded files found in AWS bucket, and auto-download failed,  Exiting"
+    exit 1
+fi
+
+if [[ "$nothing_new" == "1" && "$download_failed" == "1" ]] ; then 
+    Echo "No new manually downloaded files found in AWS bucket, and auto-download failed,  Exiting"
+    exit 1
 fi
 
 Verbose "unpack downloaded zip file"
