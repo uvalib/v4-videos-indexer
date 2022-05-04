@@ -60,10 +60,10 @@ try {
   await page.screenshot({path: `${screenshot_dir}/login.png`});
   if (verbose) console.log('At login page');
 
-  await page.type('input#edit-name', creds.username);
-  await page.type('input#edit-pass', creds.password);
+  await page.type('input[type=email]', creds.username);
+  await page.type('input[type=password]', creds.password);
   await Promise.all([
-    page.click('input#edit-submit'),
+    page.click('button[title="Log In"]'),
     page.waitForNavigation({ waitUntil: 'networkidle0' }),
   ]);
   await page.screenshot({path: `${screenshot_dir}/loggedin.png`});
