@@ -59,6 +59,7 @@ Verbose "Not running Busybox, all is well"
 diff_flag=-u
 fi
 download_failed=0
+download_succeeded=0
 
 if [[ "$screenscrape" == "-s" ]] ; then
     Verbose "Calling script to download latest records from Website"
@@ -67,45 +68,55 @@ if [[ "$screenscrape" == "-s" ]] ; then
         Echo "Script to fetch records returned error, exiting"
         Echo "Proceeding forward and checking for manually downloaded files"
         download_failed=1
+    else
+        Verbose "Script to download latest records from website succeeded, Skipping checking AWS bucket"
+        download_succeeded=1
     fi
 else
     Verbose "Skipping script to download latest records from website"
 fi 
 
-BUCKET="s3://virgo4-ingest-raw-upload-production/kanopy"
-KEY=`aws s3 ls $BUCKET --recursive 2> /dev/null | sort | tail -n 1 | sed -e 's#.*kanopy/##' `
+if [[ "$download_succeeded" == "0" ]] ; then
+    BUCKET="s3://virgo4-ingest-raw-upload-production/kanopy"
+    KEY=`aws s3 ls $BUCKET --recursive 2> /dev/null | sort | tail -n 1 | sed -e 's#.*kanopy/##' `
 
-nothing_new=0
-if [[ "$KEY" != "" ]] ; then
-    Verbose "Downloading latest file from AWS bucket $BUCKET"
-    aws s3 cp "$BUCKET/" $DATADIR/incoming_zip/ --recursive --exclude "*" --include "$KEY" 2> /dev/null
-    Verbose "Checking whether it has been processed already"
-    alreadydone=0
-    for file in `find $DATADIR/processed_zip -name "*.zip"` 
-    do 
-        cmp -s "$file" "$DATADIR/incoming_zip/$KEY"
-        return=$?
-        if [[ $return == "0" ]] ; then  
-            alreadydone=1
+    nothing_new=0
+    if [[ "$KEY" != "" ]] ; then
+        Verbose "Downloading latest file from AWS bucket $BUCKET"
+        aws s3 cp "$BUCKET/" $DATADIR/incoming_zip/ --recursive --exclude "*" --include "$KEY" 2> /dev/null
+        Verbose "Checking whether it has been processed already"
+        alreadydone=0
+        find $DATADIR/processed_zip -name "*.zip" | while read file
+        do 
+            cmp -s "$file" "$DATADIR/incoming_zip/$KEY"
+            return=$?
+            if [[ $return == "0" ]] ; then  
+                alreadydone=1
+            else 
+                if [[ "$return" == "-1" ]] ; then
+                    Verbose "cmp \"$file\"  \"$DATADIR/incoming_zip/$KEY\"  returned an error"
+                fi
+            fi
+        done
+        if [[ "$alreadydone" == "1" ]] ; then 
+            Verbose "Downloaded file already processed"
+            rm "$DATADIR/incoming_zip/$KEY"
+            nothing_new=1
+        else 
+            Verbose "Downloaded file needs to be processed"
         fi
-    done
-    if [[ "$alreadydone" == "1" ]] ; then 
-        Verbose "Downloaded file already processed"
-        rm "$DATADIR/incoming_zip/$KEY"
-        nothing_new=1
-    else 
-        Verbose "Downloaded file needs to be processed"
     fi
-fi
 
-if [[ "$KEY" == "" && "$download_failed" == "1" ]] ; then 
-    Echo "No manually downloaded files found in AWS bucket, and auto-download failed,  Exiting"
-    exit 1
-fi
+    if [[ "$KEY" == "" && "$download_failed" == "1" ]] ; then 
+        Echo "No manually downloaded files found in AWS bucket, and auto-download failed,  Exiting"
+        exit 1
+    fi
 
-if [[ "$nothing_new" == "1" && "$download_failed" == "1" ]] ; then 
-    Echo "No new manually downloaded files found in AWS bucket, and auto-download failed,  Exiting"
-    exit 1
+    if [[ "$nothing_new" == "1" && "$download_failed" == "1" ]] ; then 
+        Echo "No new manually downloaded files found in AWS bucket, and auto-download failed,  Exiting"
+        exit 1
+    fi
+
 fi
 
 Verbose "unpack downloaded zip file"
