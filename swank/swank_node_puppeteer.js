@@ -26,25 +26,6 @@ function getArgs () {
   return args;
 }
 
-async function waitFile (filename) {
-
-    return new Promise(async (resolve, reject) => {
-        if (!fs.existsSync(filename)) {
-            await delay(3000);    
-            await waitFile(filename);
-            resolve();
-        }else{
-          resolve();
-        }
-    })   
-}
-
-function delay(time) {
-    return new Promise(function(resolve) { 
-        setTimeout(resolve, time)
-    });
-}
-
 const args = getArgs();
 const verbose = args.v ? true : false;
 if (verbose) console.log(args);
@@ -93,9 +74,12 @@ try {
   await page.screenshot({path: `${screenshot_dir}/content2.png`});
   if (verbose) console.log('title checkbox clicked');
 
-  await page.click('button.mat-menu-trigger');
+  await Promise.all([
+    page.click('button.mat-menu-trigger'),
+    page.waitForTimeout(500)
+  ]);
   await page.screenshot({path: `${screenshot_dir}/content3.png`});
-  if (verbose) console.log('menu button clicked');
+  if (verbose) console.log('menu dropdown button clicked');
 
   await page._client.send('Page.setDownloadBehavior', {
                 behavior: 'allow',
@@ -103,9 +87,10 @@ try {
             }); 
 
   // Download and wait for download
+  if (verbose) console.log('menu button for titles info clicked'),
   await Promise.all([
     page.click('button.mat-menu-item:nth-child(1)'),
-    page.waitForTimeout(15000),
+    page.waitForTimeout(5000),
     // Event on all responses
     page.on('response', function getResponse(response) {
       //console.log(response);
@@ -124,57 +109,73 @@ try {
             page.removeListener("response", getResponse);
           }
         });
+        console.log('CSV file downloaded');
+      }
+      else {
+        if (verbose) console.log("headers don't contain attachment with correct name");
+        if (verbose) console.log(response._headers);
+        console.log('CSV file download failed');
       }
     })
   ]);
-  console.log('CSV file downloaded');
 
 
-  await page.click('button.mat-menu-trigger');
-  await page.screenshot({path:  `${screenshot_dir}/content3.png`});
-  if (verbose) console.log('menu button clicked');
+  await Promise.all([
+    page.click('button.mat-menu-trigger'),
+    page.waitForTimeout(500)
+  ]);
+  await page.screenshot({path:  `${screenshot_dir}/content4.png`});
+  if (verbose) console.log('menu dropdown button clicked');
 
-  // Download and wait for download
+  // Start download and wait for download to start
   await Promise.all([
     page.click('button.mat-menu-item:nth-child(2)'),
-    page.waitForTimeout(45000),
-    // Event on all responses
-    page.on('response', function getResponse(response) {
-      // if (verbose) console.log(response);
-      filepath = `${save_dir}/${filename_marc}`;
-      if (verbose) console.log(`expecting file ${filename_marc}`);
-      // If response has a file on it
-      if (response._headers['content-disposition'].includes('attachment') &&
-          response._headers['content-disposition'].includes(`filename=${filename_marc}`)) {
-        // Get the size
-        if (verbose) console.log('Size MARC header: ', response._headers['content-length']);
-        if (response._headers['content-length'] !== undefined) {
-          // Watch event on download folder or file
-          fs.watchFile(filepath, function watch(curr, prev) {
-            // If current size eq to size from response then close
-            if (parseInt(curr.size) === parseInt(response._headers['content-length'])) {
-              fs.unwatchFile(filepath, watch);
-              page.removeListener('response', getResponse);
-            }
-          });
-        }
-        else {
-          fs.watchFile(filepath, function watch(curr, prev) {
-            // If current size eq to size from response then close
-            if (parseInt(curr.size) !== 0 && parseInt(curr.size) === parseInt(prev.size)) {
-              fs.unwatchFile(filepath, watch);
-              page.removeListener('response', getResponse);
-            }
-            else {
-              if (verbose) console.log(' -- snooze -- ');
-              page.waitForTimeout(3000);
-            }
-          });
-        }
-      }
-    })
+    page.waitForTimeout(15000)
   ]);
-  console.log('MARC file downloaded');
+
+  if (verbose) console.log('menu button for MARC records clicked'),
+  // Wait for download to complete
+  // Event on all responses
+  await page.on('response', function getResponse(response) {
+    if (verbose) console.log(response._headers);
+    filepath = `${save_dir}/${filename_marc}`;
+    if (verbose) console.log(`expecting file ${filename_marc}`);
+    // If response has a file on it
+    if (response._headers['content-disposition'].includes('attachment') &&
+        response._headers['content-disposition'].includes(`filename=${filename_marc}`)) {
+      // Get the size
+      if (verbose) console.log('Size MARC header: ', response._headers['content-length']);
+      if (response._headers['content-length'] !== undefined) {
+        // Watch event on download folder or file
+        fs.watchFile(filepath, function watch(curr, prev) {
+          // If current size eq to size from response then close
+          if (parseInt(curr.size) === parseInt(response._headers['content-length'])) {
+            fs.unwatchFile(filepath, watch);
+            page.removeListener('response', getResponse);
+          }
+        });
+      }
+      else {
+        fs.watchFile(filepath, function watch(curr, prev) {
+          // If current size eq to size from response then close
+          if (parseInt(curr.size) !== 0 && parseInt(curr.size) === parseInt(prev.size)) {
+            fs.unwatchFile(filepath, watch);
+            page.removeListener('response', getResponse);
+          }
+          else {
+            if (verbose) console.log(' -- snooze -- ');
+            page.waitForTimeout(3000);
+          }
+        });
+      }
+      console.log('MARC file downloaded');
+    }
+    else {
+      if (verbose) console.log("headers don't contain attachment with correct name");
+      if (verbose) console.log(response._headers);
+      console.log('MARC file download failed');
+    }
+  });
 
   var filecsv = `${save_dir}/${filename_csv}`;
   fs.rename(filecsv, save_as_csv, function (err) {
