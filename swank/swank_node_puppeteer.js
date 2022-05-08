@@ -70,16 +70,20 @@ try {
   await page.screenshot({path: `${screenshot_dir}/content.png`});
   if (verbose) console.log('At content page');
 
-  await page.click('mat-checkbox[id=mat-checkbox-1]');
-  await page.screenshot({path: `${screenshot_dir}/content2.png`});
   if (verbose) console.log('title checkbox clicked');
+  await Promise.all([
+    page.click('mat-checkbox[id=mat-checkbox-1]'),
+    page.waitForTimeout(500)
+  ]);
 
+  await page.screenshot({path: `${screenshot_dir}/content2.png`});
+
+  if (verbose) console.log('menu dropdown button clicked');
   await Promise.all([
     page.click('button.mat-menu-trigger'),
     page.waitForTimeout(500)
   ]);
   await page.screenshot({path: `${screenshot_dir}/content3.png`});
-  if (verbose) console.log('menu dropdown button clicked');
 
   await page._client.send('Page.setDownloadBehavior', {
                 behavior: 'allow',
@@ -120,62 +124,64 @@ try {
   ]);
 
 
+  if (verbose) console.log('menu dropdown button clicked');
   await Promise.all([
     page.click('button.mat-menu-trigger'),
     page.waitForTimeout(500)
   ]);
   await page.screenshot({path:  `${screenshot_dir}/content4.png`});
-  if (verbose) console.log('menu dropdown button clicked');
 
   // Start download and wait for download to start
+  if (verbose) console.log('menu button for MARC records clicked');
+
   await Promise.all([
     page.click('button.mat-menu-item:nth-child(2)'),
-    page.waitForTimeout(15000)
-  ]);
+    page.waitForTimeout(15000),
 
-  if (verbose) console.log('menu button for MARC records clicked'),
   // Wait for download to complete
   // Event on all responses
-  await page.on('response', function getResponse(response) {
-    if (verbose) console.log(response._headers);
-    filepath = `${save_dir}/${filename_marc}`;
-    if (verbose) console.log(`expecting file ${filename_marc}`);
-    // If response has a file on it
-    if (response._headers['content-disposition'].includes('attachment') &&
-        response._headers['content-disposition'].includes(`filename=${filename_marc}`)) {
-      // Get the size
-      if (verbose) console.log('Size MARC header: ', response._headers['content-length']);
-      if (response._headers['content-length'] !== undefined) {
-        // Watch event on download folder or file
-        fs.watchFile(filepath, function watch(curr, prev) {
-          // If current size eq to size from response then close
-          if (parseInt(curr.size) === parseInt(response._headers['content-length'])) {
-            fs.unwatchFile(filepath, watch);
-            page.removeListener('response', getResponse);
-          }
-        });
+    page.on('response', function getResponse(response) {
+      if (verbose) console.log(response._headers);
+      filepath = `${save_dir}/${filename_marc}`;
+      if (verbose) console.log(`expecting file ${filename_marc}`);
+      // If response has a file on it
+      if (response._headers['content-disposition'].includes('attachment') &&
+          response._headers['content-disposition'].includes(`filename=${filename_marc}`)) {
+        // Get the size
+        if (verbose) console.log('Size MARC header: ', response._headers['content-length']);
+        if (response._headers['content-length'] !== undefined) {
+          // Watch event on download folder or file
+          fs.watchFile(filepath, function watch(curr, prev) {
+            // If current size eq to size from response then close
+            if (parseInt(curr.size) === parseInt(response._headers['content-length'])) {
+              fs.unwatchFile(filepath, watch);
+              page.removeListener('response', getResponse);
+            }
+          });
+        }
+        else {
+          fs.watchFile(filepath, function watch(curr, prev) {
+            // If current size eq to size from response then close
+            if (parseInt(curr.size) !== 0 && parseInt(curr.size) === parseInt(prev.size)) {
+              fs.unwatchFile(filepath, watch);
+              page.removeListener('response', getResponse);
+            }
+            else {
+              if (verbose) console.log(' -- snooze -- ');
+              page.waitForTimeout(3000);
+            }
+          });
+        }
+        console.log('MARC file downloaded');
       }
       else {
-        fs.watchFile(filepath, function watch(curr, prev) {
-          // If current size eq to size from response then close
-          if (parseInt(curr.size) !== 0 && parseInt(curr.size) === parseInt(prev.size)) {
-            fs.unwatchFile(filepath, watch);
-            page.removeListener('response', getResponse);
-          }
-          else {
-            if (verbose) console.log(' -- snooze -- ');
-            page.waitForTimeout(3000);
-          }
-        });
+        if (verbose) console.log("headers don't contain attachment with correct name");
+        if (verbose) console.log(response._headers);
+        console.log('MARC file download failed');
+        page.removeListener('response', getResponse);
       }
-      console.log('MARC file downloaded');
-    }
-    else {
-      if (verbose) console.log("headers don't contain attachment with correct name");
-      if (verbose) console.log(response._headers);
-      console.log('MARC file download failed');
-    }
-  });
+    })
+  ]);
 
   var filecsv = `${save_dir}/${filename_csv}`;
   fs.rename(filecsv, save_as_csv, function (err) {
