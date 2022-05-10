@@ -26,6 +26,37 @@ function getArgs () {
   return args;
 }
 
+function checkExistsWithTimeout(path, timeout) {
+  return new Promise((resolve, reject) => {
+    const timeoutTimerId = setTimeout(handleTimeout, timeout)
+    const interval = timeout / 6
+    let intervalTimerId
+
+    function handleTimeout() {
+      clearTimeout(timerId)
+
+      const error = new Error('path check timed out')
+      error.name = 'PATH_CHECK_TIMED_OUT'
+      reject(error)
+    }
+
+    function handleInterval() {
+      fs.access(path, (err) => {
+        if(err) {
+          if (verbose) console.log(`path ${path} doesn't exist yet, waiting...`);
+          intervalTimerId = setTimeout(handleInterval, interval)
+        } else {
+          if (verbose) console.log(`path ${path} exists - Yay!`);
+          clearTimeout(timeoutTimerId)
+          resolve(path)
+        }
+      })
+    }
+
+    intervalTimerId = setTimeout(handleInterval, interval)
+  })
+}
+
 const args = getArgs();
 const verbose = args.v ? true : false;
 if (verbose) console.log(args);
@@ -91,38 +122,14 @@ try {
             }); 
 
   // Download and wait for download
+  filepath = `${save_dir}/${filename_csv}`;
+
   if (verbose) console.log('menu button for titles info clicked'),
   await Promise.all([
     page.click('button.mat-menu-item:nth-child(1)'),
-    page.waitForTimeout(5000),
-    // Event on all responses
-    page.on('response', function getResponse(response) {
-      //console.log(response);
-      filepath = `${save_dir}/${filename_csv}`;
-      // If response has a file on it
-      if (response._headers['content-disposition'].includes('attachment') && 
-          response._headers['content-disposition'].includes(`filename=${filename_csv}`)) {
-        // Get the size
-        if (verbose) console.log('Size csv  header: ', response._headers['content-length']);
-        // Watch event on download folder or file
-
-        fs.watchFile(filepath, function watch(curr, prev) {
-          // If current size eq to size from response then close
-          if (parseInt(curr.size) === parseInt(response._headers['content-length'])) {
-            fs.unwatchFile(filepath, watch);
-            page.removeListener("response", getResponse);
-          }
-        });
-        console.log('CSV file downloaded');
-      }
-      else {
-        if (verbose) console.log("headers don't contain attachment with correct name");
-        if (verbose) console.log(response._headers);
-        console.log('CSV file download failed');
-      }
-    })
+    checkExistsWithTimeout(filepath, 5000)
   ]);
-
+  console.log('CSV file downloaded');
 
   if (verbose) console.log('menu dropdown button clicked');
   await Promise.all([
@@ -134,66 +141,26 @@ try {
   // Start download and wait for download to start
   if (verbose) console.log('menu button for MARC records clicked');
 
+  filepath = `${save_dir}/${filename_marc}`;
   await Promise.all([
     page.click('button.mat-menu-item:nth-child(2)'),
-    page.waitForTimeout(15000),
-
-  // Wait for download to complete
-  // Event on all responses
-    page.on('response', function getResponse(response) {
-      if (verbose) console.log(response._headers);
-      filepath = `${save_dir}/${filename_marc}`;
-      if (verbose) console.log(`expecting file ${filename_marc}`);
-      // If response has a file on it
-      if (response._headers['content-disposition'].includes('attachment') &&
-          response._headers['content-disposition'].includes(`filename=${filename_marc}`)) {
-        // Get the size
-        if (verbose) console.log('Size MARC header: ', response._headers['content-length']);
-        if (response._headers['content-length'] !== undefined) {
-          // Watch event on download folder or file
-          fs.watchFile(filepath, function watch(curr, prev) {
-            // If current size eq to size from response then close
-            if (parseInt(curr.size) === parseInt(response._headers['content-length'])) {
-              fs.unwatchFile(filepath, watch);
-              page.removeListener('response', getResponse);
-            }
-          });
-        }
-        else {
-          fs.watchFile(filepath, function watch(curr, prev) {
-            // If current size eq to size from response then close
-            if (parseInt(curr.size) !== 0 && parseInt(curr.size) === parseInt(prev.size)) {
-              fs.unwatchFile(filepath, watch);
-              page.removeListener('response', getResponse);
-            }
-            else {
-              if (verbose) console.log(' -- snooze -- ');
-              page.waitForTimeout(3000);
-            }
-          });
-        }
-        console.log('MARC file downloaded');
-      }
-      else {
-        if (verbose) console.log("headers don't contain attachment with correct name");
-        if (verbose) console.log(response._headers);
-        console.log('MARC file download failed');
-        page.removeListener('response', getResponse);
-      }
-    })
+    checkExistsWithTimeout(filepath, 25000)
   ]);
+  console.log('MARC file downloaded');
 
   var filecsv = `${save_dir}/${filename_csv}`;
   fs.rename(filecsv, save_as_csv, function (err) {
+    console.log(err);
     if (err) throw err;
-    if (verbose) console.log(`File Renamed to ${save_as_csv}`);
   }); 
+  if (verbose) console.log(`File Renamed to ${save_as_csv}`);
 
   var filemarc = `${save_dir}/${filename_marc}`;
   fs.rename(filemarc, save_as_marc, function (err) {
+    console.log(err);
     if (err) throw err;
-    if (verbose) console.log(`File Renamed to ${save_as_marc}`);
   }); 
+  if (verbose) console.log(`File Renamed to ${save_as_marc}`);
 
   browser.close();
 } // end try
