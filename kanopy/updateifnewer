@@ -86,7 +86,7 @@ if [[ "$download_succeeded" == "0" ]] ; then
         aws s3 cp "$BUCKET/" $DATADIR/incoming_zip/ --recursive --exclude "*" --include "$KEY" 2> /dev/null
         Verbose "Checking whether it has been processed already"
         alreadydone=0
-        find $DATADIR/processed_zip -name "*.zip" | while read file
+        while read file
         do 
             cmp -s "$file" "$DATADIR/incoming_zip/$KEY"
             return=$?
@@ -97,7 +97,7 @@ if [[ "$download_succeeded" == "0" ]] ; then
                     Verbose "cmp \"$file\"  \"$DATADIR/incoming_zip/$KEY\"  returned an error"
                 fi
             fi
-        done
+        done <<< `find $DATADIR/processed_zip -name "*.zip"`
         if [[ "$alreadydone" == "1" ]] ; then 
             Verbose "Downloaded file already processed"
             rm "$DATADIR/incoming_zip/$KEY"
