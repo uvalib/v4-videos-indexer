@@ -33,7 +33,7 @@ function checkExistsWithTimeout(path, timeout) {
     let intervalTimerId
 
     function handleTimeout() {
-      clearTimeout(timerId)
+      clearTimeout(timeoutTimerId)
 
       const error = new Error('path check timed out')
       error.name = 'PATH_CHECK_TIMED_OUT'
@@ -45,7 +45,8 @@ function checkExistsWithTimeout(path, timeout) {
         if(err) {
           if (verbose) console.log(`path ${path} doesn't exist yet, waiting...`);
           intervalTimerId = setTimeout(handleInterval, interval)
-        } else {
+        } 
+        else {
           if (verbose) console.log(`path ${path} exists - Yay!`);
           clearTimeout(timeoutTimerId)
           resolve(path)
@@ -144,7 +145,7 @@ try {
   filepath = `${save_dir}/${filename_marc}`;
   await Promise.all([
     page.click('button.mat-menu-item:nth-child(2)'),
-    checkExistsWithTimeout(filepath, 25000)
+    checkExistsWithTimeout(filepath, 45000)
   ]);
   console.log('MARC file downloaded');
 
