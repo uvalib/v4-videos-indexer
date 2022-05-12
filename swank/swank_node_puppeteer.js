@@ -26,10 +26,11 @@ function getArgs () {
   return args;
 }
 
-function checkExistsWithTimeout(path, timeout) {
+function checkExistsWithTimeout(path, timeout, page, screenshotName) {
   return new Promise((resolve, reject) => {
     const timeoutTimerId = setTimeout(handleTimeout, timeout)
     const interval = timeout / 6
+    iterationCnt = 0
     let intervalTimerId
 
     function handleTimeout() {
@@ -43,8 +44,10 @@ function checkExistsWithTimeout(path, timeout) {
     function handleInterval() {
       fs.access(path, (err) => {
         if(err) {
-          if (verbose) console.log(`path ${path} doesn't exist yet, waiting...`);
+          if (verbose) console.log(`path ${path} doesn't exist yet ( try: ${iterationCnt++} ), waiting...`);
           intervalTimerId = setTimeout(handleInterval, interval)
+          if (screenshotName != "") 
+              page.screenshot({path: `${screenshot_dir}/${screenshotName}_${iterationCnt}.png`});
         } 
         else {
           if (verbose) console.log(`path ${path} exists - Yay!`);
@@ -128,7 +131,7 @@ try {
   if (verbose) console.log('menu button for titles info clicked'),
   await Promise.all([
     page.click('button.mat-menu-item:nth-child(1)'),
-    checkExistsWithTimeout(filepath, 5000)
+    checkExistsWithTimeout(filepath, 5000, page, "")
   ]);
   console.log('CSV file downloaded');
 
@@ -145,7 +148,7 @@ try {
   filepath = `${save_dir}/${filename_marc}`;
   await Promise.all([
     page.click('button.mat-menu-item:nth-child(2)'),
-    checkExistsWithTimeout(filepath, 45000)
+    checkExistsWithTimeout(filepath, 90000, page, "download_marc")
   ]);
   console.log('MARC file downloaded');
 
