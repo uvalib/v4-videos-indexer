@@ -89,8 +89,8 @@ try {
   await page.screenshot({path: `${screenshot_dir}/login.png`});
   if (verbose) console.log('At login page');
 
-  await page.type('input[id=userName]', creds.username);
-  await page.type('input[id=mat-input-1]', creds.password);
+  await page.type('input[formcontrolname=userName]', creds.username);
+  await page.type('input[formcontrolname=password]', creds.password);
   await Promise.all([
     page.click('button[action=login]'),
     page.waitForNavigation({ waitUntil: 'networkidle0' }),
