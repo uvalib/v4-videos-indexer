@@ -1,6 +1,7 @@
-const puppeteer = require('puppeteer');
-const fs = require('fs');
-var dateFormat = require('dateformat');
+import puppeteer from 'puppeteer';
+import fs from 'fs';
+import dateFormat from 'dateformat';
+
 var nowstr = dateFormat(new Date(), "yyyymmdd");
 
 function getArgs () {
@@ -30,7 +31,7 @@ function checkExistsWithTimeout(path, timeout, page, screenshotName) {
   return new Promise((resolve, reject) => {
     const timeoutTimerId = setTimeout(handleTimeout, timeout)
     const interval = timeout / 6
-    iterationCnt = 0
+    var iterationCnt = 0
     let intervalTimerId
 
     function handleTimeout() {
@@ -46,9 +47,9 @@ function checkExistsWithTimeout(path, timeout, page, screenshotName) {
         if(err) {
           if (verbose) console.log(`path ${path} doesn't exist yet ( try: ${iterationCnt++} ), waiting...`);
           intervalTimerId = setTimeout(handleInterval, interval)
-          if (screenshotName != "") 
+          if (screenshotName != "")
               page.screenshot({path: `${screenshot_dir}/${screenshotName}_${iterationCnt}.png`});
-        } 
+        }
         else {
           if (verbose) console.log(`path ${path} exists - Yay!`);
           clearTimeout(timeoutTimerId)
@@ -120,10 +121,12 @@ try {
   ]);
   await page.screenshot({path: `${screenshot_dir}/content3.png`});
 
+  if (verbose) console.log(`saving CSV to dir ${save_dir}`);
+
   await page._client.send('Page.setDownloadBehavior', {
                 behavior: 'allow',
                 downloadPath: `${save_dir}`,
-            }); 
+            });
 
   // Download and wait for download
   filepath = `${save_dir}/${filename_csv}`;
@@ -131,7 +134,7 @@ try {
   if (verbose) console.log('menu button for titles info clicked'),
   await Promise.all([
     page.click('button.mat-menu-item:nth-child(1)'),
-    checkExistsWithTimeout(filepath, 5000, page, "")
+    checkExistsWithTimeout(filepath, 10000, page, "")
   ]);
   console.log('CSV file downloaded');
 
@@ -145,7 +148,9 @@ try {
   // Start download and wait for download to start
   if (verbose) console.log('menu button for MARC records clicked');
 
-  filepath = `${save_dir}/${filename_marc}`;
+  if (verbose) console.log(`saving MARC file to dir ${save_dir}`);
+
+  var filepath = `${save_dir}/${filename_marc}`;
   await Promise.all([
     page.click('button.mat-menu-item:nth-child(2)'),
     checkExistsWithTimeout(filepath, 90000, page, "download_marc")
@@ -156,14 +161,14 @@ try {
   fs.rename(filecsv, save_as_csv, function (err) {
     console.log(err);
     if (err) throw err;
-  }); 
+  });
   if (verbose) console.log(`File Renamed to ${save_as_csv}`);
 
   var filemarc = `${save_dir}/${filename_marc}`;
   fs.rename(filemarc, save_as_marc, function (err) {
     console.log(err);
     if (err) throw err;
-  }); 
+  });
   if (verbose) console.log(`File Renamed to ${save_as_marc}`);
 
   browser.close();

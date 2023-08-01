@@ -7,7 +7,7 @@ BASEDIR=$( dirname $SCRIPTDIR )
 COMMONDIR=${BASEDIR}/common
 
 # load the shared bash functions log, vlog and Verbose
-. $COMMONDIR/outputfuncs.bash 
+. $COMMONDIR/outputfuncs.bash
 
 marc4j_jar=$( find_newest_file_matching_pattern_under_directory $COMMONDIR "marc4j*.jar" )
 
@@ -65,12 +65,13 @@ if [[ ! -s "$latest_mrc_file" ]] ; then
 fi
 
 if [[ "$force" == "-f" ]] ; then
-    Verbose "Forcing a rebuild of all records" 
+    Verbose "Forcing a rebuild of all records"
     touch -d "A year ago" "$latest_file"
 fi
 
 if [[ "$latest_mrc_file" != "" && -s "$latest_mrc_file" ]] ; then
     Verbose "New file downloaded: $latest_mrc_file"
+    Verbose "New file downloaded: $latest_csv_file"
 
     Verbose "making .TSV file from .CSV file"
     # process the downloaded csv file to create a tab separated file to use in shadowing records for which the license has expired
@@ -90,22 +91,22 @@ if [[ "$latest_mrc_file" != "" && -s "$latest_mrc_file" ]] ; then
 
         if [[ "$index" =~ $solrname ]]; then
             Verbose "Checking for records to delete from Solr"
-            # process the tab separated file and the set of marc records to create a set of records that contains the license expiration date 
-            # for use in Virgo 4 
+            # process the tab separated file and the set of marc records to create a set of records that contains the license expiration date
+            # for use in Virgo 4
             previous_combined_file=$( find_newest_file_matching_pattern_under_directory $DATADIR/combined "*_${solrname}${testpat}.mrc" )
             latest_combined_file=`echo $latest_mrc_file | sed -e 's/incoming/combined/' -e "s/.mrc/_${solrname}${test}.mrc/"`
             #echo "java -cp \"$marc4j_jar:$COMMONDIR/fix_boundwith.jar\" AddFieldToRecord -c utf8 -f 988 -s a  $latest_mrc_file $latest_dates_file > $latest_combined_file"
             java -cp "$marc4j_jar:$COMMONDIR/fix_boundwith.jar" AddFieldToRecord -c utf8 -f 988 -s a  $latest_mrc_file $latest_dates_file > $latest_combined_file
-            cat $latest_combined_file | 
+            cat $latest_combined_file |
                 $COMMONDIR/getrecord -id | sort -n |  sed -e 's/^/swank_/' > $combined_dir/swank_ids_in_dump.ids
 
-            curl -s "${solrurl}/select?fl=id&q=data_source_f:swank&defType=lucene&rows=1000" | 
+            curl -s "${solrurl}/select?fl=id&q=data_source_f:swank&defType=lucene&rows=1000" |
                 egrep '"id":' | sed -e 's/.*:"//' -e 's/".*$//' | sort -n > $combined_dir/swank_ids_in_${solrname}_solr.ids
 
-            diff $combined_dir/swank_ids_in_dump.ids $combined_dir/swank_ids_in_${solrname}_solr.ids | 
+            diff $combined_dir/swank_ids_in_dump.ids $combined_dir/swank_ids_in_${solrname}_solr.ids |
                 egrep '>' | sed -e 's/> //' > $combined_dir/swank_ids_to_delete_from_${solrname}_solr.ids
 
-            if [[ "$test" != "-t" ]] ; then 
+            if [[ "$test" != "-t" ]] ; then
                 if [[ -s $combined_dir/swank_ids_to_delete_from_${solrname}_solr.ids ]] ; then
                     Verbose "Delete older records from Solr"
                     aws s3 cp  $combined_dir/swank_ids_to_delete_from_${solrname}_solr.ids  ${delete_bucket}/swank_ids_to_delete_from_${solrname}_solr.ids  2>&1 | vlog "      "
@@ -118,7 +119,7 @@ if [[ "$latest_mrc_file" != "" && -s "$latest_mrc_file" ]] ; then
                     Verbose "Uploading to S3 bucket for Virgo4"
                     aws s3 cp  $latest_combined_file  ${update_bucket}/marc_record_export_edited_${DATE}.mrc 2>&1 | vlog "      "
                 fi
-            else 
+            else
                 if [[ -s $combined_dir/swank_ids_to_delete_from_${solrname}_solr.ids ]] ; then
                     Echo "would upload $combined_dir/swank_ids_to_delete_from_${solrname}_solr.ids to ${delete_bucket}"
                 fi
