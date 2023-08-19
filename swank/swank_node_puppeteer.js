@@ -27,6 +27,37 @@ function getArgs () {
   return args;
 }
 
+const waitTillHTMLRendered = async (page, timeout = 30000) => {
+  const checkDurationMsecs = 1000;
+  const maxChecks = timeout / checkDurationMsecs;
+  let lastHTMLSize = 0;
+  let checkCounts = 1;
+  let countStableSizeIterations = 0;
+  const minStableSizeIterations = 3;
+
+  while(checkCounts++ <= maxChecks){
+    let html = await page.content();
+    let currentHTMLSize = html.length;
+
+    let bodyHTMLSize = await page.evaluate(() => document.body.innerHTML.length);
+
+    console.log('last: ', lastHTMLSize, ' <> curr: ', currentHTMLSize, " body html size: ", bodyHTMLSize);
+
+    if(lastHTMLSize != 0 && currentHTMLSize == lastHTMLSize)
+      countStableSizeIterations++;
+    else
+      countStableSizeIterations = 0; //reset the counter
+
+    if(countStableSizeIterations >= minStableSizeIterations) {
+      console.log("Page rendered fully..");
+      break;
+    }
+
+    lastHTMLSize = currentHTMLSize;
+    await page.waitForTimeout(checkDurationMsecs);
+  }
+};
+
 function checkExistsWithTimeout(path, timeout, page, screenshotName) {
   return new Promise((resolve, reject) => {
     const timeoutTimerId = setTimeout(handleTimeout, timeout)
@@ -92,17 +123,20 @@ try {
 
   await page.type('input[formcontrolname=userName]', creds.username);
   await page.type('input[formcontrolname=password]', creds.password);
+
   await Promise.all([
     page.click('button[action=login]'),
-    page.waitForNavigation({ waitUntil: 'networkidle0' }),
   ]);
+  await waitTillHTMLRendered(page);
+
   await page.screenshot({path: `${screenshot_dir}/loggedin.png`});
   if (verbose) console.log('At main admin page');
 
   await Promise.all([
     page.goto('https://digitalcampus.swankmp.net/admin/uva296909/licensed-content-manager'),
-    page.waitForNavigation({ waitUntil: 'networkidle0' }),
   ]);
+  await waitTillHTMLRendered(page);
+
   await page.screenshot({path: `${screenshot_dir}/content.png`});
   if (verbose) console.log('At content page');
 
