@@ -1,10 +1,10 @@
 #
 # build the target container
 #
-FROM public.ecr.aws/docker/library/centos:centos7.9.2009
+FROM public.ecr.aws/amazonlinux/amazonlinux:2.0.20230822.0
 
 # update the packages
-RUN yum -y update && yum -y install curl
+RUN yum -y update
 
 # install node
 RUN curl -sL https://rpm.nodesource.com/setup_16.x | bash -
@@ -15,9 +15,6 @@ RUN yum -y install pango.x86_64 libXcomposite.x86_64 libXcursor.x86_64 libXdamag
 
 # Create the run user and group
 RUN groupadd -r --gid 18570 sse && useradd --uid 1984 -r -g sse -G audio,video docker && mkdir /home/docker && chown docker:sse /home/docker
-
-# enable passwordless sudo
-RUN echo "docker ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/docker
 
 # path, etc
 ENV APP_HOME /v4-videos-indexer
