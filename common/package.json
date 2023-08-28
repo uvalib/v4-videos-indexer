@@ -1,0 +1,7 @@
+{
+  "dependencies": {
+    "dateformat": "^4.6.3",
+    "fs": "^0.0.1-security",
+    "puppeteer": "^7.1.0"
+  }
+}
