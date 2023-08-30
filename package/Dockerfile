@@ -33,6 +33,11 @@ RUN cd ${APP_HOME}/common && npm install
 RUN ln -s ${APP_HOME}/common/node_modules ${APP_HOME}/kanopy && ln -s ${APP_HOME}/common/node_modules ${APP_HOME}/swank
 RUN chown -R docker:sse ${NODE_PATH}
 
+# from: https://github.com/puppeteer/puppeteer/blob/main/docs/troubleshooting.md
+ENV SANDBOX=${NODE_PATH}/puppeteer/.local-chromium/linux-848005/chrome-linux/chrome_sandbox
+RUN chown root:root ${SANDBOX} && chmod 4755 ${SANDBOX} && cp -p ${SANDBOX} /usr/local/sbin/chrome-devel-sandbox
+ENV CHROME_DEVEL_SANDBOX=/usr/local/sbin/chrome-devel-sandbox
+
 # Specify the user
 USER docker
 
