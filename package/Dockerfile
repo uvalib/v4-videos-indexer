@@ -1,17 +1,25 @@
 #
 # build the target container
 #
-FROM public.ecr.aws/amazonlinux/amazonlinux:2.0.20230822.0
+FROM public.ecr.aws/docker/library/debian:buster
 
 # update the packages
-RUN yum -y update
+RUN apt-get -y update && apt-get -y upgrade && apt-get -y install curl awscli file zip unzip
 
 # install node
-RUN curl -sL https://rpm.nodesource.com/setup_16.x | bash -
-RUN yum install -y nodejs
+RUN curl -sL https://deb.nodesource.com/setup_18.x | bash -
+RUN apt-get -y update && apt-get -y upgrade
+RUN apt-get install -y nodejs
 
-# install required dependancies
-RUN yum -y install pango.x86_64 libXcomposite.x86_64 libXcursor.x86_64 libXdamage.x86_64 libXext.x86_64 libXi.x86_64 libXtst.x86_64 cups-libs.x86_64 libXScrnSaver.x86_64 libXrandr.x86_64 GConf2.x86_64 alsa-lib.x86_64 atk.x86_64 gtk3.x86_64 ipa-gothic-fonts xorg-x11-fonts-100dpi xorg-x11-fonts-75dpi xorg-x11-utils xorg-x11-fonts-cyrillic xorg-x11-fonts-Type1 xorg-x11-fonts-misc sudo awscli file java-1.8.0-openjdk-devel zip unzip
+# install required dependancies for Chrome headless
+# from: https://pptr.dev/troubleshooting
+RUN apt-get -y install ca-certificates fonts-liberation libasound2 libatk-bridge2.0-0 libatk1.0-0 libc6 libcairo2 libcups2 libdbus-1-3 libexpat1 libfontconfig1 libgbm1 libgcc1 libglib2.0-0 libgtk-3-0 libnspr4 libnss3 libpango-1.0-0 libpangocairo-1.0-0 libstdc++6 libx11-6 libx11-xcb1 libxcb1 libxcomposite1 libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 libxrender1 libxss1 libxtst6 lsb-release wget xdg-utils
+
+# install JAVA 8
+# from: https://adoptium.net/installation/linux/#_deb_installation_on_debian_or_ubuntu
+RUN mkdir -p /etc/apt/keyrings && wget -O - https://packages.adoptium.net/artifactory/api/gpg/key/public | tee /etc/apt/keyrings/adoptium.asc
+RUN echo "deb [signed-by=/etc/apt/keyrings/adoptium.asc] https://packages.adoptium.net/artifactory/deb $(awk -F= '/^VERSION_CODENAME/{print$2}' /etc/os-release) main" | tee /etc/apt/sources.list.d/adoptium.list
+RUN apt-get -y update && apt-get -y install temurin-8-jdk
 
 # Create the run user and group
 RUN groupadd -r --gid 18570 sse && useradd --uid 1984 -r -g sse -G audio,video docker && mkdir /home/docker && chown docker:sse /home/docker
@@ -26,6 +34,7 @@ COPY common/ ${APP_HOME}/common
 COPY kanopy/ ${APP_HOME}/kanopy
 COPY swank/ ${APP_HOME}/swank
 COPY index_all_videos ${APP_HOME}
+RUN chown -R docker:sse ${APP_HOME}
 
 # install the node packages
 ENV NODE_PATH ${APP_HOME}/common/node_modules
