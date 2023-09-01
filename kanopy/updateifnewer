@@ -269,7 +269,7 @@ do
 done
 
 exitcode=0
-if [[ -e $DATADIR/aws_err.txt ]] ; then
+if [[ -s $DATADIR/aws_err.txt ]] ; then
     exitcode=1
     cat $DATADIR/aws_err.txt | vlog "      "
 fi
