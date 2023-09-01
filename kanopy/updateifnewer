@@ -1,4 +1,5 @@
-
+#!/bin/bash
+ 
 SCRIPTDIR=$( (cd -P $(dirname $0) && pwd) )
 corename=kanopy
 DATADIR=${SCRIPTDIR}/data
@@ -76,14 +77,16 @@ else
     Verbose "Skipping script to download latest records from website"
 fi 
 
+cat /dev/null > $DATADIR/aws_err.txt
+
 if [[ "$download_succeeded" == "0" ]] ; then
     BUCKET="s3://virgo4-ingest-raw-upload-production/kanopy"
-    KEY=`aws s3 ls $BUCKET --recursive 2> /dev/null | sort | tail -n 1 | sed -e 's#.*kanopy/##' `
+    KEY=`aws s3 ls $BUCKET --recursive 2>> $DATADIR/aws_err.txt  | sort | tail -n 1 | sed -e 's#.*kanopy/##' `
 
     nothing_new=0
     if [[ "$KEY" != "" ]] ; then
         Verbose "Downloading latest file from AWS bucket $BUCKET"
-        aws s3 cp "$BUCKET/" $DATADIR/incoming_zip/ --recursive --exclude "*" --include "$KEY" 2> /dev/null
+        aws s3 cp "$BUCKET/" $DATADIR/incoming_zip/ --recursive --exclude "*" --include "$KEY" 2>> $DATADIR/aws_err.txt
         Verbose "Checking whether it has been processed already"
         alreadydone=0
         newest_processed_file=$( find_newest_file_matching_pattern_under_directory $DATADIR/processed_zip "*.zip" )
@@ -219,7 +222,7 @@ do
                 upname=`basename $update`
                 if [[ -s $update ]] ; then
                     if [[ "$test" != "-t" ]] ; then
-                        aws s3 cp $update ${update_bucket}/$upname 2>/dev/null | vlog "      "
+                        aws s3 cp $update ${update_bucket}/$upname 2>> $DATADIR/aws_err.txt | vlog "      "
                         rm $update
                     else 
                         Verbose "would upload $update to $solrname bucket"
@@ -231,7 +234,7 @@ do
                 upname=`basename $update`
                 if [[ -s $update ]] ; then
                     if [[ "$test" != "-t" ]] ; then
-                        aws s3 cp $update ${delete_bucket}/$upname 2>/dev/null | vlog "      "
+                        aws s3 cp $update ${delete_bucket}/$upname 2>> $DATADIR/aws_err.txt | vlog "      "
                         rm $update
                     else 
                         Verbose "would upload $update to $solrname delete bucket"
@@ -248,7 +251,7 @@ do
             if [ -s $DATADIR/records_to_delete_${corename}_${solrname}.ids ] ; then
                 Verbose "Some records in virgo solr that are not in the new dump of all records"
                 if [ "$test" != "-t" ]; then
-                    aws s3 cp $DATADIR/records_to_delete_${corename}_${solrname}.ids ${delete_bucket}/records_to_delete_${corename}_${solrname}.ids 2>/dev/null | vlog "      "
+                    aws s3 cp $DATADIR/records_to_delete_${corename}_${solrname}.ids ${delete_bucket}/records_to_delete_${corename}_${solrname}.ids 2>> $DATADIR/aws_err.txt | vlog "      "
                 else
                     Echo "would upload $DATADIR/records_to_delete_${corename}_${solrname}.ids to ${delete_bucket}"
                 fi
@@ -257,7 +260,7 @@ do
             fi
 
             if [ "$test" != "-t" ]; then
-                aws s3 cp $DATADIR/records/all_kanopy_records_edited.mrc ${update_bucket}/all_kanopy_records_edited.mrc 2>/dev/null | vlog "      "
+                aws s3 cp $DATADIR/records/all_kanopy_records_edited.mrc ${update_bucket}/all_kanopy_records_edited.mrc 2>> $DATADIR/aws_err.txt | vlog "      "
             else 
                 Echo "would upload $DATADIR/records/all_kanopy_records_edited.mrc to $update_bucket"
             fi
@@ -265,5 +268,12 @@ do
     fi
 done
 
+exitcode=0
+if [[ -e $DATADIR/aws_err.txt ]] ; then
+    exitcode=1
+    cat $DATADIR/aws_err.txt | vlog "      "
+fi
+
 Verbose "    Done updating core $corename"
 
+exit $exitcode
