@@ -134,7 +134,7 @@ try {
   await Promise.all([
     page.click('button[title="Log In"]'),
     page.waitForNavigation({ waitUntil: 'networkidle2' }),
-    page.waitForTimeout(500)
+    page.waitForTimeout(5000)
   ]);
   await waitTillHTMLRendered(page);
   await page.screenshot({path: `${screenshot_dir}/loggedin.png`});
