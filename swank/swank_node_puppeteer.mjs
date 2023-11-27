@@ -28,7 +28,7 @@ function getArgs () {
 }
 
 const waitTillHTMLRendered = async (page, timeout = 30000) => {
-  const checkDurationMsecs = 1000;
+  const checkDurationMsecs = 1500;
   const maxChecks = timeout / checkDurationMsecs;
   let lastHTMLSize = 0;
   let checkCounts = 1;
@@ -111,7 +111,7 @@ const save_as_marc = `${datadir}/incoming/${args.marc}`;
 
 async function getRecords() {
 try {
-  const browser = await puppeteer.launch({userDataDir:`${datadir}/.config`, headless: 'true' });
+  const browser = await puppeteer.launch({userDataDir:`${datadir}/.config`, headless: 'false' });
   const page = await browser.newPage();
   await page.setViewport({width: 1200, height: 1000})
   await Promise.all([
@@ -155,6 +155,7 @@ try {
 
   await Promise.all([
     page.goto('https://digitalcampus.swankmp.net/admin/uva296909/licensed-content-manager'),
+    page.waitForTimeout(10000)
   ]);
   await waitTillHTMLRendered(page);
 
@@ -163,7 +164,7 @@ try {
 
   if (verbose) console.log('title checkbox clicked');
   await Promise.all([
-    page.click('mat-checkbox[id=mat-checkbox-1]'),
+    page.click('mat-checkbox[id=mat-mdc-checkbox-1]'),
     page.waitForTimeout(500)
   ]);
 
@@ -171,7 +172,7 @@ try {
 
   if (verbose) console.log('menu dropdown button clicked');
   await Promise.all([
-    page.click('button.mat-menu-trigger'),
+    page.click('button[aria-haspopup="menu"]'),
     page.waitForTimeout(500)
   ]);
   await page.screenshot({path: `${screenshot_dir}/content3.png`});
@@ -189,14 +190,14 @@ try {
 
   if (verbose) console.log('menu button for titles info clicked'),
   await Promise.all([
-    page.click('button.mat-menu-item:nth-child(1)'),
+    page.click('#mat-menu-panel-0 > div > button:nth-child(1)'),
     checkExistsWithTimeout(filepath, 10000, page, "")
   ]);
   console.log('CSV file downloaded');
 
   if (verbose) console.log('menu dropdown button clicked');
   await Promise.all([
-    page.click('button.mat-menu-trigger'),
+    page.click('button[aria-haspopup="menu"]'),
     page.waitForTimeout(500)
   ]);
   await page.screenshot({path:  `${screenshot_dir}/content4.png`});
@@ -208,7 +209,7 @@ try {
 
   var filepath = `${save_dir}/${filename_marc}`;
   await Promise.all([
-    page.click('button.mat-menu-item:nth-child(2)'),
+    page.click('#mat-menu-panel-0 > div > button:nth-child(2)'),
     checkExistsWithTimeout(filepath, 90000, page, "download_marc")
   ]);
   console.log('MARC file downloaded');
