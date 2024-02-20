@@ -146,7 +146,7 @@ if [[ "$latest_mrc_file" != "" && -s "$latest_mrc_file" ]] ; then
                 if [[ "$previous_combined_file" == "" ]]; then previous_combined_file="/dev/null"; fi
                 Verbose "Calling   cmp -s $latest_combined_file $previous_combined_file "
                 cmp -s "$latest_combined_file" "$previous_combined_file"
-                if [[ "$?" != "0" ]] ; then
+                if [[ "$?" != "0" || "$force" == "-f" ]] ; then
                     Verbose "Uploading to S3 bucket for Virgo4"
                     aws s3 cp  $latest_combined_file  ${update_bucket}/marc_record_export_edited_${DATE}.mrc 2>&1 | vlog "      "
                 fi
