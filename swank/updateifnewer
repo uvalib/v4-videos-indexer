@@ -97,6 +97,7 @@ if [[ "$latest_mrc_file" != "" && -s "$latest_mrc_file" ]] ; then
     latest_tsv_file=`echo $latest_csv_file | sed -e 's/.csv$/.tsv/'`
     latest_dates_file=`echo $latest_csv_file | sed -e 's/.csv$/.date/'`
 
+    Verbose "finding column names in .CSV file"
     column_name_row=$(head -1 $latest_csv_file | tr -d '\r' | sed $'s/\\("\\([^"]*\\)"\\)\\?,/\\2\t/g') 
     let title_col=1+$(find_column_with_value "$column_name_row" "Title")
     let part_col=1+$(find_column_with_value "$column_name_row" "Poster Art Link")
@@ -105,6 +106,7 @@ if [[ "$latest_mrc_file" != "" && -s "$latest_mrc_file" ]] ; then
         Echo "Serious Error: Column headers in CSV file aren't as expected"
         exit -1
     fi
+    Verbose "Title Column = $title_col    Poster Art Column = $part_col    Valid Until Date Column = $valid_col"
     egrep -v '^Title'  $latest_csv_file | sed $'s/\\("\\([^"]*\\)"\\)\\?,/\\2\t/g' | cut -f $part_col | 
            sed -e 's#.*/en/##' -e 's/small.jpg.*//' -e 's/[-_][0-9]*//' > $latest_ids_file
     egrep -v '^Title' $latest_csv_file |  sed $'s/\\("\\([^"]*\\)"\\)\\?,/\\2\t/g' | 
