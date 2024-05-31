@@ -35,14 +35,12 @@ if [[ "$noscrape" == "" ]] ; then
     screenscrape=-s
 fi
 
-mkdir -p $DATADIR/records
-mkdir -p $DATADIR/incoming_zip
-mkdir -p $DATADIR/incoming
-mkdir -p $DATADIR/processed_zip
-mkdir -p $DATADIR/incoming_sorted
-mkdir -p $DATADIR/processed
-mkdir -p $DATADIR/updates_incoming
-mkdir -p $DATADIR/screenshots
+mkdir -p $DATADIR/records $DATADIR/incoming_zip $DATADIR/incoming $DATADIR/processed_zip $DATADIR/incoming_sorted $DATADIR/processed $DATADIR/updates_incoming $DATADIR/screenshots
+if [[ $? != 0 ]]; then
+    Echo "mkdir command failed, nothing else is going to work"
+    exit 1
+fi
+
 #if [[ ! -d $COMMONDIR/node_modules ]] ; then
 #    Echo "Node modules not installed in common directory.  Exiting"
 #    exit 1
