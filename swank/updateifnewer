@@ -47,10 +47,12 @@ find_column_with_value() {
     echo "-1"
 }
 
-mkdir -p $DATADIR/incoming
-mkdir -p $DATADIR/screenshots
-mkdir -p $DATADIR/combined
-mkdir -p $DATADIR/tmp
+mkdir -p $DATADIR/incoming $DATADIR/screenshots $DATADIR/combined $DATADIR/tmp
+if [[ $? != 0 ]]; then
+    Echo "mkdir failed, nothing else is going to work"
+    exit 1
+fi
+
 #if [[ ! -d $COMMONDIR/node_modules ]] ; then
 #    Echo "Node modules not installed in common directory.  Exiting"
 #    exit 1
