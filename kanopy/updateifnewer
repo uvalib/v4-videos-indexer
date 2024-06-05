@@ -13,7 +13,7 @@ COMMONDIR=${BASEDIR}/common
 marc4j_jar=$( find_newest_file_matching_pattern_under_directory $COMMONDIR "marc4j*.jar" )
 
 verbose=
-force=
+force=-f
 test=
 screenscrape=
 noscrape=
@@ -70,7 +70,7 @@ if [[ "$screenscrape" == "-s" ]] ; then
     Verbose "Calling script to download latest records from Website"
     $SCRIPTDIR/getkanopyrecordsviapuppeteer $verbose $force
     if [[ "$?" != "0" ]]; then
-        Echo "Script to fetch records returned error, exiting"
+        Echo "Script to fetch records returned ERROR, exiting"
         Echo "Proceeding forward and checking for manually downloaded files"
         download_failed=1
     else
@@ -136,6 +136,7 @@ if [[ "$latest_zip_file" != "" ]]; then
         unzip -o -q "$DATADIR/incoming_zip/$froot" -d $DATADIR/incoming
     else
         Echo "Error:  downloaded file not in .zip format -- it is: $(file -b $file)"
+        exit 1
     fi
     mv  "$DATADIR/incoming_zip/$froot" $DATADIR/processed_zip
 else
@@ -255,7 +256,7 @@ do
             if [ -s $DATADIR/records_to_delete_${corename}_${solrname}.ids ] ; then
                 Verbose "Some records in virgo solr that are not in the new dump of all records"
                 if [ "$test" != "-t" ]; then
-                    aws s3 cp $DATADIR/records_to_delete_${corename}_${solrname}.ids ${delete_bucket}/records_to_delete_${corename}_${solrname}.ids 2>> $DATADIR/aws_err.txt | vlog "      "
+                    aws s3 cp $DATADIR/records_to_delete_${corename}_${solrname}.ids ${delete_bucket}/records_to_delete_${corename}_${solrname}_${DATE}.ids 2>> $DATADIR/aws_err.txt | vlog "      "
                 else
                     Echo "would upload $DATADIR/records_to_delete_${corename}_${solrname}.ids to ${delete_bucket}"
                 fi
@@ -264,7 +265,7 @@ do
             fi
 
             if [ "$test" != "-t" ]; then
-                aws s3 cp $DATADIR/records/all_kanopy_records_edited.mrc ${update_bucket}/all_kanopy_records_edited.mrc 2>> $DATADIR/aws_err.txt | vlog "      "
+                aws s3 cp $DATADIR/records/all_kanopy_records_edited.mrc ${update_bucket}/all_kanopy_records_edited_${DATE}.mrc 2>> $DATADIR/aws_err.txt | vlog "      "
             else 
                 Echo "would upload $DATADIR/records/all_kanopy_records_edited.mrc to $update_bucket"
             fi
