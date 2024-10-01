@@ -1,6 +1,7 @@
 import puppeteer from 'puppeteer';
 import fs from 'fs';
 import dateFormat from  'dateformat';
+import { glob } from 'glob';
 
 var nowstr = dateFormat(new Date(), "yyyymmdd");
 
@@ -34,13 +35,18 @@ const waitTillHTMLRendered = async (page, timeout = 30000) => {
   let checkCounts = 1;
   let countStableSizeIterations = 0;
   const minStableSizeIterations = 3;
+  await new Promise(resolve => setTimeout(resolve, checkDurationMsecs)); 
+
 
   while(checkCounts++ <= maxChecks){
     let html = await page.content();
     let currentHTMLSize = html.length;
 
-    let bodyHTMLSize = await page.evaluate(() => document.body.innerHTML.length);
-
+    let bodyHTMLSize = await page.evaluate(() => {
+      // Check if innerHTML exists and is not empty
+      return document.body.innerHTML ? document.body.innerHTML.length : 0;
+    });
+    
     console.log('last: ', lastHTMLSize, ' <> curr: ', currentHTMLSize, " body html size: ", bodyHTMLSize);
 
     if(lastHTMLSize != 0 && currentHTMLSize == lastHTMLSize)
@@ -54,9 +60,64 @@ const waitTillHTMLRendered = async (page, timeout = 30000) => {
     }
 
     lastHTMLSize = currentHTMLSize;
-    await page.waitForTimeout(checkDurationMsecs);
+    await new Promise(resolve => setTimeout(resolve, checkDurationMsecs)); 
   }
 };
+
+function checkExistsByPatternWithTimeout(pathPattern, timeout, page, screenshotName) {
+  return new Promise((resolve, reject) => {
+    const timeoutTimerId = setTimeout(handleTimeout, timeout);
+    const interval = timeout / 6;
+    let iterationCnt = 0;
+    let intervalTimerId;
+
+    function handleTimeout() {
+      clearTimeout(timeoutTimerId);
+      const error = new Error('path check timed out');
+      error.name = 'PATH_CHECK_TIMED_OUT';
+      reject(error);
+    }
+
+    function handleInterval() {
+        // Use an immediately invoked async function expression (IIFE) to run the async code
+        // Resolve wildcard pathPattern using glob
+        var matchedFiles;
+        try {
+          const files = glob.sync(pathPattern); // Synchronous version of glob
+          if (files.length > 0) {
+            console.log('Matched files:', files);
+            matchedFiles = files;
+          } else {
+            console.log('No files matched.');
+          }
+        } catch (err) {
+          console.error('Glob error:', err);
+          clearTimeout(timeoutTimerId);
+          reject(err);
+          return;
+        }
+
+        if (matchedFiles == null || matchedFiles.length === 0) {
+          // No files matched the pattern
+          if (verbose) console.log(`path ${pathPattern} doesn't exist yet ( try: ${iterationCnt++} ), waiting...`);
+          intervalTimerId = setTimeout(handleInterval, interval);
+
+          if (screenshotName != "") {
+            page.screenshot({ path: `${screenshot_dir}/${screenshotName}_${iterationCnt}.png` });
+          }
+        } else {
+          // Sort files alphabetically and resolve with the last one
+          const lastFile = matchedFiles.sort().pop();
+          if (verbose) console.log(`path ${lastFile} exists - Yay!`);
+          clearTimeout(timeoutTimerId);
+          resolve(lastFile);
+        }
+    }
+
+    intervalTimerId = setTimeout(handleInterval, interval);
+  });
+}
+
 
 function checkExistsWithTimeout(path, timeout, page, screenshotName) {
   return new Promise((resolve, reject) => {
@@ -103,6 +164,7 @@ const creds = {
 const datadir = args.dir ? args.dir : "./data";
 if (verbose) console.log(creds);
 const filename_zip = 'Kanopy_MARC_Records__additions__virginia.zip'; // args.marc
+const filename_zip_pattern = 'Kanopy_MARC_Records__additions__virginia__*.zip'; // args.marc
 const save_dir = `${datadir}/tmp`;
 const incoming_dir = `${datadir}/incoming_zip`;
 const screenshot_dir = `${datadir}/screenshots`;
@@ -122,8 +184,7 @@ try {
   await page.setViewport({width: 1200, height: 1000})
   await Promise.all([
     page.goto(loginurl),
-    page.waitForNavigation({ waitUntil: 'networkidle2' }),
-    page.waitForTimeout(500)
+    page.waitForNavigation({ waitUntil: 'networkidle2' })
   ]);
   await waitTillHTMLRendered(page);
   await page.screenshot({path: `${screenshot_dir}/login.png`});
@@ -133,8 +194,7 @@ try {
   await page.type('input[type=password]', creds.password);
   await Promise.all([
     page.click('button[title="Log In"]'),
-    page.waitForNavigation({ waitUntil: 'networkidle2' }),
-    page.waitForTimeout(5000)
+    page.waitForNavigation({ waitUntil: 'networkidle2' })
   ]);
   await waitTillHTMLRendered(page);
   await page.screenshot({path: `${screenshot_dir}/loggedin.png`});
@@ -142,15 +202,13 @@ try {
 
   await Promise.all([
     page.goto(landing),
-    page.waitForNavigation({ waitUntil: 'networkidle2' }),
-    page.waitForTimeout(500)
+    page.waitForNavigation({ waitUntil: 'networkidle2' })
   ]);
   await waitTillHTMLRendered(page);
 
   await Promise.all([
     page.goto('https://digitalcampus.swankmp.net/admin/uva296909/licensed-content-manager'),
-    page.waitForNavigation({ waitUntil: 'networkidle2' }),
-    page.waitForTimeout(500)
+    page.waitForNavigation({ waitUntil: 'networkidle2' })
   ]);
   await waitTillHTMLRendered(page);
 
@@ -159,8 +217,7 @@ try {
 
   await Promise.all([
     page.goto(mrpageurl),
-    page.waitForNavigation({ waitUntil: 'networkidle2' }),
-    page.waitForTimeout(500)
+    page.waitForNavigation({ waitUntil: 'networkidle2' })
   ]);
   await waitTillHTMLRendered(page);
 
@@ -178,25 +235,33 @@ try {
   await Promise.all([
     page.click('input#edit-dl-all'),
     page.waitForSelector('a.button:nth-child(2)', {visible: true}),
-    page.waitForNavigation({ waitUntil: 'networkidle2' }),
-    page.waitForTimeout(1500)
+    page.waitForNavigation({ waitUntil: 'networkidle2' })
   ]);
   await waitTillHTMLRendered(page);
 
   await page.screenshot({path: `${screenshot_dir}/marcpage2.png`});
   if (verbose) console.log('At marc download page w/button');
 
-      var filepath = `${save_dir}/${filename_zip}`;
-  // Download and wait for download
-  await Promise.all([
-    // click the big orange button
-    page.click('a.button:nth-child(2)'),
-    checkExistsWithTimeout(filepath, 25000, page, "download_zip")
-  ]);
+  var filepath_pattern = `${save_dir}/${filename_zip_pattern}`;
+  var last_filename;
+   // Download and wait for download
+   await Promise.all([
+     // click the big orange button
+     page.click('a.button:nth-child(2)'),
+     checkExistsByPatternWithTimeout(filepath_pattern, 50000, page, "download_zip")
+        .then((file) => {
+            last_filename = file;
+            if (verbose) console.log('Alphabetically last file:', last_filename);
+        })
+        .catch((err) => {
+            console.error(err);
+        })
+   ]);
 
   console.log('Kanopy Zip file downloaded');
 
-  var filezip = `${save_dir}/${filename_zip}`;
+  var filezip = `${last_filename}`;
+
   fs.rename(filezip, save_as_zip, function (err) {
     if (err) throw err;
     if (verbose) console.log(`File Renamed to ${save_as_zip}`);

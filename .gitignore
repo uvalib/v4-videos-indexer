@@ -1,5 +1,7 @@
 kanopy/data
 swank/data
 common/node_modules
+kanopy/node_modules
+swank/node_modules
 tmp
 package/scripts
