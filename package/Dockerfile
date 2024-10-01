@@ -1,7 +1,7 @@
 #
 # build the target container
 #
-FROM public.ecr.aws/docker/library/debian:buster
+FROM public.ecr.aws/docker/library/debian:buster-20240612
 
 # update the packages
 RUN apt-get -y update && apt-get -y upgrade && apt-get -y install curl awscli file zip unzip
@@ -25,7 +25,7 @@ RUN apt-get -y update && apt-get -y install temurin-8-jdk
 RUN groupadd -r --gid 18570 sse && useradd --uid 1984 -r -g sse -G audio,video docker && mkdir /home/docker && chown docker:sse /home/docker
 
 # path, etc
-ENV APP_HOME /v4-videos-indexer
+ENV APP_HOME=/v4-videos-indexer
 WORKDIR ${APP_HOME}
 
 # install the app
@@ -37,13 +37,14 @@ COPY index_all_videos ${APP_HOME}
 RUN chown -R docker:sse ${APP_HOME}
 
 # install the node packages
-ENV NODE_PATH ${APP_HOME}/common/node_modules
+ENV NODE_PATH=${APP_HOME}/common/node_modules
 RUN cd ${APP_HOME}/common && npm install
 RUN ln -s ${APP_HOME}/common/node_modules ${APP_HOME}/kanopy && ln -s ${APP_HOME}/common/node_modules ${APP_HOME}/swank
 RUN chown -R docker:sse ${NODE_PATH}
 
 # from: https://github.com/puppeteer/puppeteer/blob/main/docs/troubleshooting.md
-ENV SANDBOX=${NODE_PATH}/puppeteer/.local-chromium/linux-848005/chrome-linux/chrome_sandbox
+#ENV SANDBOX=${NODE_PATH}/puppeteer/.local-chromium/linux-848005/chrome-linux/chrome_sandbox
+ENV SANDBOX=/root/.cache/puppeteer/chrome/linux-129.0.6668.70/chrome-linux64/chrome_sandbox
 RUN chown root:root ${SANDBOX} && chmod 4755 ${SANDBOX} && cp -p ${SANDBOX} /usr/local/sbin/chrome-devel-sandbox
 ENV CHROME_DEVEL_SANDBOX=/usr/local/sbin/chrome-devel-sandbox
 
