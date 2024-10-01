@@ -34,6 +34,7 @@ const waitTillHTMLRendered = async (page, timeout = 30000) => {
   let checkCounts = 1;
   let countStableSizeIterations = 0;
   const minStableSizeIterations = 3;
+  await new Promise(resolve => setTimeout(resolve, checkDurationMsecs));
 
   while(checkCounts++ <= maxChecks){
     let html = await page.content();
@@ -54,7 +55,7 @@ const waitTillHTMLRendered = async (page, timeout = 30000) => {
     }
 
     lastHTMLSize = currentHTMLSize;
-    await page.waitForTimeout(checkDurationMsecs);
+    await new Promise(resolve => setTimeout(resolve, checkDurationMsecs));
   }
 };
 
@@ -155,7 +156,7 @@ try {
 
   await Promise.all([
     page.goto('https://digitalcampus.swankmp.net/admin/uva296909/licensed-content-manager'),
-    page.waitForTimeout(10000)
+    await new Promise(resolve => setTimeout(resolve, 10000))
   ]);
   await waitTillHTMLRendered(page);
 
@@ -165,7 +166,7 @@ try {
   if (verbose) console.log('title checkbox clicked');
   await Promise.all([
     page.click('mat-checkbox[id=mat-mdc-checkbox-1]'),
-    page.waitForTimeout(500)
+    await new Promise(resolve => setTimeout(resolve, 500))
   ]);
 
   await page.screenshot({path: `${screenshot_dir}/content2.png`});
@@ -173,7 +174,7 @@ try {
   if (verbose) console.log('menu dropdown button clicked');
   await Promise.all([
     page.click('button[aria-haspopup="menu"]'),
-    page.waitForTimeout(500)
+    await new Promise(resolve => setTimeout(resolve, 500))
   ]);
   await page.screenshot({path: `${screenshot_dir}/content3.png`});
 
@@ -198,7 +199,7 @@ try {
   if (verbose) console.log('menu dropdown button clicked');
   await Promise.all([
     page.click('button[aria-haspopup="menu"]'),
-    page.waitForTimeout(500)
+    await new Promise(resolve => setTimeout(resolve, 500))
   ]);
   await page.screenshot({path:  `${screenshot_dir}/content4.png`});
 
