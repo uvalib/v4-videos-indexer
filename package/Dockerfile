@@ -36,6 +36,9 @@ COPY swank/ ${APP_HOME}/swank
 COPY index_all_videos ${APP_HOME}
 RUN chown -R docker:sse ${APP_HOME}
 
+# Specify the user
+USER docker
+
 # install the node packages
 ENV NODE_PATH=${APP_HOME}/common/node_modules
 RUN cd ${APP_HOME}/common && npm install
@@ -43,13 +46,12 @@ RUN ln -s ${APP_HOME}/common/node_modules ${APP_HOME}/kanopy && ln -s ${APP_HOME
 RUN chown -R docker:sse ${NODE_PATH}
 
 # from: https://github.com/puppeteer/puppeteer/blob/main/docs/troubleshooting.md
-ENV PUPPETEER_CACHE_DIR=/root/.cache/puppeteer
+ENV PUPPETEER_CACHE_DIR=/home/docker/.cache/puppeteer
 ENV SANDBOX=${PUPPETEER_CACHE_DIR}/chrome/linux-129.0.6668.70/chrome-linux64/chrome_sandbox
+USER root
 RUN chown root:root ${SANDBOX} && chmod 4755 ${SANDBOX} && cp -p ${SANDBOX} /usr/local/sbin/chrome-devel-sandbox
-ENV CHROME_DEVEL_SANDBOX=/usr/local/sbin/chrome-devel-sandbox
-
-# Specify the user
 USER docker
+ENV CHROME_DEVEL_SANDBOX=/usr/local/sbin/chrome-devel-sandbox
 
 #
 # end of file
