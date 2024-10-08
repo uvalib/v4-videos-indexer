@@ -112,7 +112,7 @@ const save_as_marc = `${datadir}/incoming/${args.marc}`;
 
 async function getRecords() {
 try {
-  const browser = await puppeteer.launch({userDataDir:`${datadir}/.config`, headless: 'false' });
+  const browser = await puppeteer.launch({userDataDir:`${datadir}/.config`, headless: 'true', args: ['--no-sandbox', '--disable-setuid-sandbox']});
   const page = await browser.newPage();
   await page.setViewport({width: 1200, height: 1000})
   await Promise.all([
@@ -234,13 +234,14 @@ try {
   if (verbose) console.log(`${ls}`);
   fs.writeFileSync(`${save_dir}/localStorageId.json`, ls);
 
-  browser.close();
+  // Properly close the browser
+  await browser.close();
 } // end try
 catch (err) {
   console.log("Error caught!!");
   //console.log(err);
   if (typeof myVar !== 'undefined' && browser != null) {
-    browser.close();
+    await browser.close();
   }
   process.exitCode = 1;
   console.log("Error re-thrown");
