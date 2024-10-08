@@ -38,6 +38,8 @@ if [[ "$force" == "-f" && -e $DATADIR/processed_zip/$kanopy_filename ]] ; then
     rm -f $DATADIR/processed_zip/$kanopy_filename
 fi
 
+rm -f $DATADIR/.config/Sing*
+
 tries=0
 done=0
 if [[ ! -e $DATADIR/incoming_zip/$kanopy_filename && ! -e $DATADIR/processed_zip/$kanopy_filename ]] ; then

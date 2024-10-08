@@ -35,6 +35,7 @@ fi
 
 # node swank_node_puppeteer.js -v --user=uva16 --pass=Admin001 --dir=./data --csv=swank_nodejs_${DATE}.csv --marc=swank_nodejs_${DATE}.mrc
 
+rm -rf $DATADIR/.config/Sing*
 
 tries=0
 done=0
