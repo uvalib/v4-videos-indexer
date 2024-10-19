@@ -163,7 +163,7 @@ const creds = {
 };
 const datadir = args.dir ? args.dir : "./data";
 if (verbose) console.log(creds);
-const filename_zip = 'Kanopy_MARC_Records__additions__virginia.zip'; // args.marc
+const filename_zip = 'Kanopy_MARC_Records_virginia_full.zip'; // args.marc
 const filename_zip_pattern = 'Kanopy_MARC_Records__additions__virginia__*.zip'; // args.marc
 const save_dir = `${datadir}/tmp`;
 const incoming_dir = `${datadir}/incoming_zip`;
@@ -243,12 +243,13 @@ try {
   if (verbose) console.log('At marc download page w/button');
 
   var filepath_pattern = `${save_dir}/${filename_zip_pattern}`;
+  var filepath= `${save_dir}/${filename_zip}`;
   var last_filename;
    // Download and wait for download
    await Promise.all([
      // click the big orange button
      page.click('a.button:nth-child(2)'),
-     checkExistsByPatternWithTimeout(filepath_pattern, 50000, page, "download_zip")
+     checkExistsWithTimeout(filepath, 50000, page, "download_zip")
         .then((file) => {
             last_filename = file;
             if (verbose) console.log('Alphabetically last file:', last_filename);
@@ -268,12 +269,26 @@ try {
   });
 
   // Properly close the browser
+  const pages = await browser.pages();
+  for (let i = 0; i < pages.length; i++) {
+    console.log("closing page");
+    await pages[i].close();
+    console.log("page closed");
+  }
+  console.log("all pages closed");
   await browser.close();
 } // end try
 catch (err) {
   console.log("Error caught!!");
   //console.log(err);
   if (typeof myVar !== 'undefined' && browser != null) {
+    const pages = await browser.pages();
+    for (let i = 0; i < pages.length; i++) {
+      console.log("closing page");
+      await pages[i].close();
+      console.log("page closed");
+    }
+    console.log("all pages closed");
     await browser.close();
   }
   process.exitCode = 1;

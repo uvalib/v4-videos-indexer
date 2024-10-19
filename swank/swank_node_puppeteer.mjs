@@ -235,12 +235,26 @@ try {
   fs.writeFileSync(`${save_dir}/localStorageId.json`, ls);
 
   // Properly close the browser
+  const pages = await browser.pages();
+  for (let i = 0; i < pages.length; i++) {
+    console.log("closing page");
+    await pages[i].close();
+    console.log("page closed");
+  }
+  console.log("all pages closed");
   await browser.close();
 } // end try
 catch (err) {
   console.log("Error caught!!");
   //console.log(err);
   if (typeof myVar !== 'undefined' && browser != null) {
+    const pages = await browser.pages();
+    for (let i = 0; i < pages.length; i++) {
+      console.log("closing page");
+      await pages[i].close();
+      console.log("page closed");
+    }
+    console.log("all pages closed");
     await browser.close();
   }
   process.exitCode = 1;
