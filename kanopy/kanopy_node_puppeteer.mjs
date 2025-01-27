@@ -231,12 +231,29 @@ try {
             });
 
   // Download and wait for download
-  // #edit-dl-all
-  await Promise.all([
-    page.click('input#edit-dl-all'),
-    page.waitForSelector('a.button:nth-child(2)', {visible: true}),
-    page.waitForNavigation({ waitUntil: 'networkidle2' })
-  ]);
+  // Locate and click the button that follows an <h4>, which follows an <h6> containing "All Records"
+  const buttonSelector = 'h6:has-text("All Records") + h4 + button';
+
+  // Wait for the button to be visible (if necessary)
+  await page.waitForSelector(buttonSelector);
+
+  // Click the button
+  await page.click(buttonSelector);
+
+  // Wait for the "Download" button to appear in the dialog
+  const downloadButtonSelector = 'button:has-text("Download")';
+  await page.waitForSelector(downloadButtonSelector);
+
+  // Wait for the "Download" button to become enabled
+  await page.waitForFunction(
+    (selector) => {
+      const button = document.querySelector(selector);
+      return button && !button.disabled;
+    },
+    {}, // Pass the download button selector as an argument
+    downloadButtonSelector
+  );
+
   await waitTillHTMLRendered(page);
 
   await page.screenshot({path: `${screenshot_dir}/marcpage2.png`});
@@ -246,9 +263,9 @@ try {
   var filepath= `${save_dir}/${filename_zip}`;
   var last_filename;
    // Download and wait for download
-   await Promise.all([
-     // click the big orange button
-     page.click('a.button:nth-child(2)'),
+  await Promise.all([
+     // Click the "Download" button
+     await page.click(downloadButtonSelector),
      checkExistsWithTimeout(filepath, 50000, page, "download_zip")
         .then((file) => {
             last_filename = file;
