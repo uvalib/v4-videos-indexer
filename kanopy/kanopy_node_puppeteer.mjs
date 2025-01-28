@@ -179,8 +179,18 @@ const save_as_zip = `${incoming_dir}/${args.file}`;
 
 async function getRecords() {
 try { 
-  const browser = await puppeteer.launch({userDataDir:`${datadir}/.config`, headless: "true", args: ['--no-sandbox', '--disable-setuid-sandbox']});
+  const browser = await puppeteer.launch({userDataDir:`${datadir}/.config`, headless: "true", 
+                             args: ['--no-sandbox', 
+                                    '--disable-setuid-sandbox', 
+                                    '--disable-web-security', 
+                                    '--disable-features=IsolateOrigins,site-per-process', 
+                                    '--allow-insecure-localhost' 
+                                   ]});
+
   const page = await browser.newPage();
+  await page.setUserAgent(
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36'
+  );
   await page.setViewport({width: 1200, height: 1000})
   await Promise.all([
     page.goto(loginurl),
@@ -192,10 +202,13 @@ try {
 
   await page.type('input[type=email]', creds.username);
   await page.type('input[type=password]', creds.password);
+  if (verbose) console.log('At login page wolf 1');
+
   await Promise.all([
     page.click('button[title="Log In"]'),
     page.waitForNavigation({ waitUntil: 'networkidle2' })
   ]);
+  if (verbose) console.log('At login page wolf 2');
   await waitTillHTMLRendered(page);
   await page.screenshot({path: `${screenshot_dir}/loggedin.png`});
   if (verbose) console.log('At main admin page');
@@ -230,51 +243,121 @@ try {
                 downloadPath: `${save_dir}`,
             });
 
-  // Download and wait for download
-  // Locate and click the button that follows an <h4>, which follows an <h6> containing "All Records"
-  const buttonSelector = 'h6:has-text("All Records") + h4 + button';
-
-  // Wait for the button to be visible (if necessary)
-  await page.waitForSelector(buttonSelector);
-
-  // Click the button
-  await page.click(buttonSelector);
-
-  // Wait for the "Download" button to appear in the dialog
-  const downloadButtonSelector = 'button:has-text("Download")';
-  await page.waitForSelector(downloadButtonSelector);
-
-  // Wait for the "Download" button to become enabled
-  await page.waitForFunction(
-    (selector) => {
-      const button = document.querySelector(selector);
-      return button && !button.disabled;
-    },
-    {}, // Pass the download button selector as an argument
-    downloadButtonSelector
-  );
-
   await waitTillHTMLRendered(page);
 
-  await page.screenshot({path: `${screenshot_dir}/marcpage2.png`});
-  if (verbose) console.log('At marc download page w/button');
+  // Listen to console messages from the page context
+  page.on('console', msg => {
+    console.log('PAGE LOG:', msg.text());  // Log the text of each console message
+  });
 
-  var filepath_pattern = `${save_dir}/${filename_zip_pattern}`;
-  var filepath= `${save_dir}/${filename_zip}`;
-  var last_filename;
-   // Download and wait for download
-  await Promise.all([
-     // Click the "Download" button
-     await page.click(downloadButtonSelector),
-     checkExistsWithTimeout(filepath, 50000, page, "download_zip")
-        .then((file) => {
-            last_filename = file;
-            if (verbose) console.log('Alphabetically last file:', last_filename);
-        })
-        .catch((err) => {
-            console.error(err);
-        })
-   ]);
+  // Wait for the iframe to appear on the page
+  await page.waitForSelector('#kadmin-iframe'); // Replace with the correct selector if needed
+
+  // Locate the iframe using its ID
+  const iframeElement = await page.$('#kadmin-iframe'); // Select the iframe by its ID
+  if (!iframeElement) {
+    throw new Error('Iframe not found!');
+  }
+
+  // Get the iframe's contentFrame
+  const iframe = await iframeElement.contentFrame(); // Access the iframe's content
+  if (!iframe) {
+    throw new Error('Failed to get iframe contentFrame!');
+  }
+
+  const dynamicButtonId = await iframe.evaluate(() => {
+    const h6s = Array.from(document.querySelectorAll('h6'));
+    for (const h6 of h6s) {
+      console.log('h6 found with text: '+h6.textContent);
+      if (h6.textContent.includes('All Records')) {
+        console.log('found h6 All Records');
+        const h4 = h6.nextElementSibling;
+        if (h4) console.log('found h6 All Records');
+        const targetButton = h4?.nextElementSibling;
+        if (targetButton) console.log('found button');
+        if (targetButton && targetButton.tagName === 'BUTTON') {
+          const uniqueId = 'dynamic-button-' + Date.now();
+          targetButton.id = uniqueId;
+          return uniqueId; // Return the unique ID
+        }
+      }
+    }
+  });
+
+  if (dynamicButtonId) {
+    console.log('Dynamically assigned button ID:', dynamicButtonId);
+  
+    // Use Puppeteer to click the button outside of evaluate
+    const buttonHandle = await iframe.$(`#${dynamicButtonId}`); // Get the button handle using the dynamic ID
+    if (buttonHandle) {
+      await buttonHandle.click(); // Click the button
+      console.log('Clicked the Generate All button successfully!');
+    } else {
+      console.log('Failed to find the Generate All button using the dynamic ID');
+    }
+  } else {
+    console.log('Generate All button not found in the iframe');
+  }
+  await page.screenshot({path: `${screenshot_dir}/marcpage1.png`});
+  if (verbose) console.log('At marc download page waiting for button');
+
+  await new Promise((resolve) => setTimeout(resolve, 2000)); // Wait for 2000 milliseconds
+
+  // Step 2: Locate and enable the "Download" button
+  const buttonId = await iframe.evaluate(() => {
+    const buttons = Array.from(document.querySelectorAll('button'));
+    const downloadButton = buttons.find((btn) => btn.textContent.trim() === 'Download');
+    if (downloadButton) {
+      const uniqueId = 'unique-download-button';
+      downloadButton.id = uniqueId;
+      return uniqueId;
+    }
+    return null;
+  });
+  
+  if (!buttonId) {
+    console.log('Failed to find the "Download" button.');
+  } else {
+    console.log(`"Download" button found and assigned id: ${buttonId}`);
+  }
+  
+  // Step 3: Wait for the button to become enabled
+  if (buttonId) {
+    await iframe.waitForFunction(
+      (id) => {
+        const button = document.getElementById(id);
+        return button && !button.disabled;
+      },
+      { polling: 'mutation', timeout: 30000 },
+      buttonId
+    );
+  
+    console.log('The "Download" button is now enabled.');
+
+    var filepath_pattern = `${save_dir}/${filename_zip_pattern}`;
+    var filepath= `${save_dir}/${filename_zip}`;
+    var last_filename;
+
+    // Step 4: Click the button
+    const downloadButtonHandle = await iframe.$(`#${buttonId}`);
+    if (downloadButtonHandle) {
+      await downloadButtonHandle.click();
+      console.log('Clicked the "Download" button.');
+  
+      // Step 5: Wait for the file to finish downloading
+      console.log('Waiting for the file to finish downloading...');
+      await checkExistsWithTimeout(filepath, 50000, page, "download_zip")
+         .then((file) => {
+             last_filename = file;
+             if (verbose) console.log('Alphabetically last file:', last_filename);
+         })
+         .catch((err) => {
+             console.error(err);
+         })
+    } else {
+      console.error('Failed to select the button using the unique id.');
+    }
+  }
 
   console.log('Kanopy Zip file downloaded');
 
