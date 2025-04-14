@@ -165,7 +165,7 @@ try {
 
   if (verbose) console.log('title checkbox clicked');
   await Promise.all([
-    page.click('mat-checkbox[id=mat-mdc-checkbox-1]'),
+    page.click('mat-checkbox[id=mat-mdc-checkbox-0]'),
     await new Promise(resolve => setTimeout(resolve, 500))
   ]);
 
