@@ -163,7 +163,7 @@ try {
   await page.screenshot({path: `${screenshot_dir}/content.png`});
   if (verbose) console.log('At content page');
 
-  if (verbose) console.log('title checkbox clicked');
+  if (verbose) console.log('title checkbox id=mat-mdc-checkbox-0 clicked');
   await Promise.all([
     page.click('mat-checkbox[id=mat-mdc-checkbox-0]'),
     await new Promise(resolve => setTimeout(resolve, 500))
