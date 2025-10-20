@@ -323,15 +323,24 @@ try {
   
   // Step 3: Wait for the button to become enabled
   if (buttonId) {
+    console.log('Waiting for the "Download" button to become enabled...');
+  
     await iframe.waitForFunction(
       (id) => {
-        const button = document.getElementById(id);
-        return button && !button.disabled;
+        const btn = document.getElementById(id);
+        if (!btn) return false;
+  
+        const ariaDisabled = btn.getAttribute('aria-disabled');
+        const visuallyDisabled =
+          btn.classList.contains('disabled') ||
+          btn.classList.contains('is-disabled');
+
+        return !btn.disabled && ariaDisabled !== 'true' && !visuallyDisabled;
       },
-      { polling: 'mutation', timeout: 30000 },
+      { polling: 200, timeout: 30000 },
       buttonId
     );
-  
+
     console.log('The "Download" button is now enabled.');
 
     var filepath_pattern = `${save_dir}/${filename_zip_pattern}`;
