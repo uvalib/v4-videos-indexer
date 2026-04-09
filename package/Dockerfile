@@ -1,7 +1,7 @@
 #
 # build the target container
 #
-FROM public.ecr.aws/docker/library/debian:buster-20240612
+FROM public.ecr.aws/docker/library/debian:bookworm-20240612
 
 # update the packages
 RUN apt-get -y update && apt-get -y upgrade && apt-get -y install curl awscli file zip unzip
@@ -18,7 +18,7 @@ RUN apt-get -y install ca-certificates fonts-liberation libasound2 libatk-bridge
 # install JAVA 8
 # from: https://adoptium.net/installation/linux/#_deb_installation_on_debian_or_ubuntu
 RUN mkdir -p /etc/apt/keyrings && wget -O - https://packages.adoptium.net/artifactory/api/gpg/key/public | tee /etc/apt/keyrings/adoptium.asc
-RUN echo "deb [signed-by=/etc/apt/keyrings/adoptium.asc] https://packages.adoptium.net/artifactory/deb $(awk -F= '/^VERSION_CODENAME/{print$2}' /etc/os-release) main" | tee /etc/apt/sources.list.d/adoptium.list
+RUN echo "deb [signed-by=/etc/apt/keyrings/adoptium.asc] https://packages.adoptium.net/artifactory/deb bookworm main" | tee /etc/apt/sources.list.d/adoptium.list
 RUN apt-get -y update && apt-get -y install temurin-8-jdk
 
 # Create the run user and group
