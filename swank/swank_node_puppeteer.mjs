@@ -116,7 +116,7 @@ try {
   const page = await browser.newPage();
   await page.setViewport({width: 1200, height: 1000})
   await Promise.all([
-    page.goto('https://digitalcampus.swankmp.net/admin/login'),
+    page.goto('https://digitalcampus-swankmp-net.proxy1.library.virginia.edu/admin/uva296909/dashboard'),
     page.waitForNavigation({ waitUntil: 'networkidle0' }),
   ]);
   var localStorageVal = '';
