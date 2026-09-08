@@ -40,7 +40,7 @@ rm -rf $DATADIR/.config/Sing*
 tries=0
 done=0
 if [[ ! -e  $DATADIR/incoming/swank_nodejs_${DATE}.csv || ! -e  $DATADIR/incoming/swank_nodejs_${DATE}.mrc ]] ; then
-    while [[ "$done" == 0 && "$tries" < 1 ]]; do
+    while [[ "$done" == 0 && "$tries" -lt 3 ]]; do
         #rm -rf $DATADIR/.config/Default/
         Verbose "Running Puppeteer/NodeJS to login and trigger download"
         node $SCRIPTDIR/swank_node_puppeteer.mjs -v --user=***REMOVED*** --pass=***REMOVED*** --dir=$DATADIR --csv=swank_nodejs_${DATE}.csv --marc=swank_nodejs_${DATE}.mrc | vlog "    nodeJS: "

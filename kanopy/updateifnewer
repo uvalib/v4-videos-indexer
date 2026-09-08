@@ -85,10 +85,35 @@ cat /dev/null > $DATADIR/aws_err.txt
 
 if [[ "$download_succeeded" == "0" ]] ; then
     BUCKET="s3://virgo4-ingest-raw-upload-production/kanopy"
-    KEY=`aws s3 ls $BUCKET --recursive 2>> $DATADIR/aws_err.txt  | sort | tail -n 1 | sed -e 's#.*kanopy/##' `
+    latest_line=`aws s3 ls $BUCKET --recursive 2>> $DATADIR/aws_err.txt | sort | tail -n 1`
+    KEY=`echo "$latest_line" | sed -e 's#.*kanopy/##' `
 
     nothing_new=0
     if [[ "$KEY" != "" ]] ; then
+        # Guard against silently reprocessing a stale manually-uploaded file.
+        # `aws s3 ls` lines are "<date> <time> <size> <key>"; use the date/time
+        # to compute the object's actual age rather than trusting file/key
+        # ordering alone. Under the -f (force) flag downstream, an old file
+        # doesn't just mean "no update" - it means every record added since
+        # then looks deleted and gets queued for removal from Solr. Default
+        # threshold is 3 days; override with MAX_MANUAL_FILE_AGE_DAYS.
+        max_age_days=${MAX_MANUAL_FILE_AGE_DAYS:-3}
+        last_modified=`echo "$latest_line" | awk '{print $1" "$2}'`
+        file_epoch=`date -d "$last_modified" +%s 2>/dev/null`
+        now_epoch=`date +%s`
+        if [[ -n "$file_epoch" ]] ; then
+            age_days=$(( (now_epoch - file_epoch) / 86400 ))
+            if [[ $age_days -gt $max_age_days ]] ; then
+                Echo "ERROR: Latest manually-uploaded file '$KEY' in $BUCKET is $age_days days old (uploaded $last_modified, threshold is $max_age_days days)."
+                Echo "Refusing to auto-process stale fallback data - a forced reindex from this file would queue currently-valid records for deletion. Exiting"
+                exit 1
+            else
+                Verbose "Manually-uploaded file '$KEY' is $age_days days old (within $max_age_days day threshold), proceeding"
+            fi
+        else
+            Echo "WARNING: could not parse last-modified date '$last_modified' for '$KEY' - proceeding without a freshness check"
+        fi
+
         Verbose "Downloading latest file from AWS bucket $BUCKET"
         aws s3 cp "$BUCKET/" $DATADIR/incoming_zip/ --recursive --exclude "*" --include "$KEY" 2>> $DATADIR/aws_err.txt
         Verbose "Checking whether it has been processed already"

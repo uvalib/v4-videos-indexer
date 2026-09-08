@@ -28,6 +28,22 @@ function getArgs () {
   return args;
 }
 
+// Dumps a URL/screenshot/HTML snapshot for post-mortem debugging.
+// Wrapped so a diagnostics failure never masks the real error.
+async function logDiagnostics(page, label) {
+  const stamp = Date.now();
+  try {
+    const url = page.url();
+    console.log(`DIAG[${label}] url = ${url}`);
+    await page.screenshot({ path: `${screenshot_dir}/diag_${label}_${stamp}.png` }).catch(() => {});
+    const html = await page.content().catch(() => '<content() failed>');
+    fs.writeFileSync(`${screenshot_dir}/diag_${label}_${stamp}.html`, html);
+    console.log(`DIAG[${label}] snapshot written: diag_${label}_${stamp}.{png,html}`);
+  } catch (diagErr) {
+    console.log(`DIAG[${label}] failed to collect diagnostics:`, diagErr.message);
+  }
+}
+
 const waitTillHTMLRendered = async (page, timeout = 30000) => {
   const checkDurationMsecs = 1000;
   const maxChecks = timeout / checkDurationMsecs;
@@ -39,15 +55,30 @@ const waitTillHTMLRendered = async (page, timeout = 30000) => {
 
 
   while(checkCounts++ <= maxChecks){
-    let html = await page.content();
-    let currentHTMLSize = html.length;
+    let currentHTMLSize;
+    let bodyHTMLSize;
 
-    let bodyHTMLSize = await page.evaluate(() => {
-      // Check if innerHTML exists and is not empty
-      return document.body.innerHTML ? document.body.innerHTML.length : 0;
-    });
-    
-    console.log('last: ', lastHTMLSize, ' <> curr: ', currentHTMLSize, " body html size: ", bodyHTMLSize);
+    try {
+      let html = await page.content();
+      currentHTMLSize = html.length;
+
+      bodyHTMLSize = await page.evaluate(() => {
+        // Check if innerHTML exists and is not empty
+        return document.body && document.body.innerHTML ? document.body.innerHTML.length : 0;
+      });
+    } catch (transientErr) {
+      // "Execution context was destroyed" / null document.body both mean the
+      // page is mid-navigation (another redirect fired after the one Puppeteer
+      // already waited for). Treat this as "still loading", not fatal: reset
+      // the stability counter and try again on the next tick instead of throwing.
+      console.log(`waitTillHTMLRendered: transient error (${transientErr.message}), retrying...`);
+      countStableSizeIterations = 0;
+      lastHTMLSize = 0;
+      await new Promise(resolve => setTimeout(resolve, checkDurationMsecs));
+      continue;
+    }
+
+    console.log('last: ', lastHTMLSize, ' <> curr: ', currentHTMLSize, " body html size: ", bodyHTMLSize, " url: ", page.url());
 
     if(lastHTMLSize != 0 && currentHTMLSize == lastHTMLSize)
       countStableSizeIterations++;
@@ -178,8 +209,9 @@ const filename = args.file;
 const save_as_zip = `${incoming_dir}/${args.file}`;
 
 async function getRecords() {
+let browser, page; // hoisted so the catch block below can actually see & close them
 try { 
-  const browser = await puppeteer.launch({userDataDir:`${datadir}/.config`, headless: "true", 
+  browser = await puppeteer.launch({userDataDir:`${datadir}/.config`, headless: "true", 
                              args: ['--no-sandbox', 
                                     '--disable-setuid-sandbox', 
                                     '--disable-web-security', 
@@ -187,7 +219,7 @@ try {
                                     '--allow-insecure-localhost' 
                                    ]});
 
-  const page = await browser.newPage();
+  page = await browser.newPage();
   await page.setUserAgent(
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36'
   );
@@ -198,7 +230,17 @@ try {
   ]);
   await waitTillHTMLRendered(page);
   await page.screenshot({path: `${screenshot_dir}/login.png`});
-  if (verbose) console.log('At login page');
+  if (verbose) console.log('At login page, url =', page.url());
+
+  // Verify the login form is actually present before assuming so. If a
+  // stale session (persisted userDataDir) or a bot-check/rate-limit page
+  // got served instead, this fails fast with the real URL + a snapshot,
+  // instead of throwing an opaque "no selector" error deep in page.type().
+  const emailField = await page.waitForSelector('input[type=email]', { timeout: 15000 }).catch(() => null);
+  if (!emailField) {
+    await logDiagnostics(page, 'no_email_field');
+    throw new Error(`Login form not found at ${page.url()} - possibly already logged in (stale session) or served a different page (bot check / rate limit). See diag_no_email_field snapshot.`);
+  }
 
   await page.type('input[type=email]', creds.username);
   await page.type('input[type=password]', creds.password);
@@ -388,9 +430,11 @@ try {
   await browser.close();
 } // end try
 catch (err) {
-  console.log("Error caught!!");
-  //console.log(err);
-  if (typeof myVar !== 'undefined' && browser != null) {
+  console.log("Error caught!!:", err.message);
+  if (page != null) {
+    await logDiagnostics(page, 'fatal_error');
+  }
+  if (browser != null) {
     const pages = await browser.pages();
     for (let i = 0; i < pages.length; i++) {
       console.log("closing page");
@@ -407,4 +451,3 @@ catch (err) {
 };
 
 getRecords().then( () => process.exit(0)).catch( (err) => { console.log(err); process.exit(1) });
-

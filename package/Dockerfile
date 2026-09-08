@@ -42,7 +42,8 @@ USER docker
 # install the node packages
 ENV NODE_PATH=${APP_HOME}/common/node_modules
 RUN cd ${APP_HOME}/common && npm install
-RUN ln -s ${APP_HOME}/common/node_modules ${APP_HOME}/kanopy && ln -s ${APP_HOME}/common/node_modules ${APP_HOME}/swank
+RUN ln -sfn ${APP_HOME}/common/node_modules ${APP_HOME}/kanopy/node_modules \
+ && ln -sfn ${APP_HOME}/common/node_modules ${APP_HOME}/swank/node_modules
 RUN chown -R docker:sse ${NODE_PATH}
 
 # from: https://github.com/puppeteer/puppeteer/blob/main/docs/troubleshooting.md
