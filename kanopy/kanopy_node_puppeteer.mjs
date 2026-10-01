@@ -51,7 +51,7 @@ const waitTillHTMLRendered = async (page, timeout = 30000) => {
   let checkCounts = 1;
   let countStableSizeIterations = 0;
   const minStableSizeIterations = 3;
-  await new Promise(resolve => setTimeout(resolve, checkDurationMsecs)); 
+  await new Promise(resolve => setTimeout(resolve, checkDurationMsecs));
 
 
   while(checkCounts++ <= maxChecks){
@@ -91,7 +91,7 @@ const waitTillHTMLRendered = async (page, timeout = 30000) => {
     }
 
     lastHTMLSize = currentHTMLSize;
-    await new Promise(resolve => setTimeout(resolve, checkDurationMsecs)); 
+    await new Promise(resolve => setTimeout(resolve, checkDurationMsecs));
   }
 };
 
@@ -210,13 +210,13 @@ const save_as_zip = `${incoming_dir}/${args.file}`;
 
 async function getRecords() {
 let browser, page; // hoisted so the catch block below can actually see & close them
-try { 
-  browser = await puppeteer.launch({userDataDir:`${datadir}/.config`, headless: "true", 
-                             args: ['--no-sandbox', 
-                                    '--disable-setuid-sandbox', 
-                                    '--disable-web-security', 
-                                    '--disable-features=IsolateOrigins,site-per-process', 
-                                    '--allow-insecure-localhost' 
+try {
+  browser = await puppeteer.launch({userDataDir:`${datadir}/.config`, headless: "true",
+                             args: ['--no-sandbox',
+                                    '--disable-setuid-sandbox',
+                                    '--disable-web-security',
+                                    '--disable-features=IsolateOrigins,site-per-process',
+                                    '--allow-insecure-localhost'
                                    ]});
 
   page = await browser.newPage();
@@ -246,8 +246,25 @@ try {
   await page.type('input[type=password]', creds.password);
   if (verbose) console.log('At login page wolf 1');
 
+  // NOTE: previously selected the login button via button[title="Log In"].
+  // Diagnostic snapshots captured from live failures show Kanopy's current
+  // markup uses title="Log in" / aria-label="Log in" (lowercase "in") - CSS
+  // attribute selectors are case-sensitive on the value, so that selector
+  // silently stopped matching anything. The email/password fields still
+  // matched fine (input[type=email]/[type=password] aren't case-sensitive
+  // text comparisons), the click then found no element and threw, and the
+  // catch block's logDiagnostics fired right there - which is exactly the
+  // "stuck on login with fields filled in" behavior that was reported.
+  // Matching on the button's class instead of a free-text title/aria-label
+  // avoids re-breaking on a future case or wording change to that attribute.
+  const loginButton = await page.waitForSelector('button.login-button', { timeout: 15000 }).catch(() => null);
+  if (!loginButton) {
+    await logDiagnostics(page, 'no_login_button');
+    throw new Error(`Login button (button.login-button) not found at ${page.url()} - selector may be stale again. See diag_no_login_button snapshot.`);
+  }
+
   await Promise.all([
-    page.click('button[title="Log In"]'),
+    page.click('button.login-button'),
     page.waitForNavigation({ waitUntil: 'networkidle2' })
   ]);
   if (verbose) console.log('At login page wolf 2');
@@ -328,7 +345,7 @@ try {
 
   if (dynamicButtonId) {
     console.log('Dynamically assigned button ID:', dynamicButtonId);
-  
+
     // Use Puppeteer to click the button outside of evaluate
     const buttonHandle = await iframe.$(`#${dynamicButtonId}`); // Get the button handle using the dynamic ID
     if (buttonHandle) {
@@ -356,22 +373,22 @@ try {
     }
     return null;
   });
-  
+
   if (!buttonId) {
     console.log('Failed to find the "Download" button.');
   } else {
     console.log(`"Download" button found and assigned id: ${buttonId}`);
   }
-  
+
   // Step 3: Wait for the button to become enabled
   if (buttonId) {
     console.log('Waiting for the "Download" button to become enabled...');
-  
+
     await iframe.waitForFunction(
       (id) => {
         const btn = document.getElementById(id);
         if (!btn) return false;
-  
+
         const ariaDisabled = btn.getAttribute('aria-disabled');
         const visuallyDisabled =
           btn.classList.contains('disabled') ||
@@ -394,7 +411,7 @@ try {
     if (downloadButtonHandle) {
       await downloadButtonHandle.click();
       console.log('Clicked the "Download" button.');
-  
+
       // Step 5: Wait for the file to finish downloading
       console.log('Waiting for the file to finish downloading...');
       await checkExistsWithTimeout(filepath, 50000, page, "download_zip")
