@@ -78,3 +78,49 @@ function Echo ()
 {
     echo "$1"  | log
 }
+
+# Status lines that CloudWatch alarms watch for (see the v4-video-indexer
+# cloud-watch.tf in terraform-infrastructure). Each provider should emit
+# VIDEO_INDEXER_OK once per successful run (a heartbeat alarm fires if it goes
+# missing) and VIDEO_INDEXER_ALERT whenever something needs a human to look.
+# These are echoed directly rather than through log() so they always appear,
+# verbose or not, and are never altered by log()'s read/IFS handling.
+function StatusOK ()
+{
+    echo "$corename: VIDEO_INDEXER_OK provider=$corename $*"
+}
+
+# usage: StatusAlert <reason> [key=value ...]
+function StatusAlert ()
+{
+    local reason=$1
+    shift
+    echo "$corename: VIDEO_INDEXER_ALERT provider=$corename reason=$reason $*"
+}
+
+# The puppeteer scripts leave a key=value scrape_result file in their data
+# directory saying how far they got.  usage: scrape_result_field <file> <key>
+function scrape_result_field ()
+{
+    sed -n "s/^$2=//p" "$1" 2>/dev/null | head -1
+}
+
+# One-line summary of a failed scrape, for inclusion in a StatusAlert line.
+function scrape_failure_summary ()
+{
+    local file=$1
+    if [[ ! -s "$file" ]] ; then
+        echo "step=unknown detail=\"scraper left no scrape_result file\""
+        return
+    fi
+    echo "step=$(scrape_result_field $file step) detail=\"$(scrape_result_field $file error)\" screenshot=$(scrape_result_field $file diagnostics)"
+}
+
+# Lets the bash wrappers record a failure they detect themselves (e.g. the
+# download finished but isn't a valid zip) in the same format.
+# usage: write_scrape_result <file> <step> <error message>
+function write_scrape_result ()
+{
+    printf 'status=failed\nprovider=%s\nstep=%s\nerror=%s\ndiagnostics=\ntime=%s\n' \
+        "$corename" "$2" "$(echo "$3" | tr -d '"\n')" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$1"
+}

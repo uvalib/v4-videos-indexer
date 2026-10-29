@@ -28,6 +28,10 @@ shift $((OPTIND-1))
 
 DATE=`date +%Y%m%d`
 YEAR=`date +%Y`
+# If a new dump has fewer than this percent of the records currently in Solr,
+# assume the download is truncated: skip queuing deletes and raise an alert
+# rather than removing currently-valid records from the index.
+min_record_percent=${MIN_RECORD_PERCENT:-90}
 
 find_column_with_value() {
     local row="$1"
@@ -69,10 +73,14 @@ fi
 
 if [[ "$test" == "-t" ]] ; then testpat="*"; else testpat=""; fi;
 
+cat /dev/null > $DATADIR/aws_err.txt
+
 Verbose "Fetching records from SWANK website"
 $SCRIPTDIR/getswankrecordsviapuppeteer $verbose $force
 if [[ "$?" != "0" ]]; then
-    Echo "Script to fetch records returned error, exiting"
+    scrape_detail=$(scrape_failure_summary $DATADIR/scrape_result)
+    Echo "Script to fetch records returned error, exiting: $scrape_detail"
+    StatusAlert scrape_failed fallback=none $scrape_detail
     exit 1
 fi
 
@@ -104,9 +112,11 @@ if [[ "$latest_mrc_file" != "" && -s "$latest_mrc_file" ]] ; then
     let title_col=1+$(find_column_with_value "$column_name_row" "Title")
     let part_col=1+$(find_column_with_value "$column_name_row" "Poster Art Link")
     let valid_col=1+$(find_column_with_value "$column_name_row" "License - Valid To")
-    if [[ "$title_col" == -1 || "$part_col" == -1 || "$valid_col" == -1 ]] ; then
+    # find_column_with_value returns -1 when missing, so 0 here after adding 1
+    if [[ "$title_col" == 0 || "$part_col" == 0 || "$valid_col" == 0 ]] ; then
         Echo "Serious Error: Column headers in CSV file aren't as expected"
-        exit -1
+        StatusAlert csv_format_changed "detail=\"expected Title, Poster Art Link and License - Valid To columns\""
+        exit 1
     fi
     Verbose "Title Column = $title_col    Poster Art Column = $part_col    Valid Until Date Column = $valid_col"
     egrep -v '^Title'  $latest_csv_file | sed $'s/\\("\\([^"]*\\)"\\)\\?,/\\2\t/g' | cut -f $part_col | 
@@ -133,16 +143,24 @@ if [[ "$latest_mrc_file" != "" && -s "$latest_mrc_file" ]] ; then
             cat $latest_combined_file |
                 $COMMONDIR/getrecord -id | sort -n |  sed -e 's/^/swank_/' > $combined_dir/swank_ids_in_dump.ids
 
-            curl -s "${solrurl}/select?fl=id&q=data_source_f:swank&defType=lucene&rows=1000" |
+            curl -s "${solrurl}/select?fl=id&q=data_source_f:swank&defType=lucene&rows=10000" |
                 egrep '"id":' | sed -e 's/.*:"//' -e 's/".*$//' | sort -n > $combined_dir/swank_ids_in_${solrname}_solr.ids
 
             diff $combined_dir/swank_ids_in_dump.ids $combined_dir/swank_ids_in_${solrname}_solr.ids |
                 egrep '>' | sed -e 's/> //' > $combined_dir/swank_ids_to_delete_from_${solrname}_solr.ids
 
+            num_in_dump=`cat $combined_dir/swank_ids_in_dump.ids | wc -l`
+            num_in_solr=`cat $combined_dir/swank_ids_in_${solrname}_solr.ids | wc -l`
+            if (( num_in_solr > 0 && num_in_dump * 100 < num_in_solr * min_record_percent )) ; then
+                Echo "ERROR: new dump has $num_in_dump records but $solrname solr has $num_in_solr; not queuing deletes"
+                StatusAlert record_count_drop index=$solrname in_dump=$num_in_dump in_solr=$num_in_solr "detail=\"deletes skipped\""
+                cat /dev/null > $combined_dir/swank_ids_to_delete_from_${solrname}_solr.ids
+            fi
+
             if [[ "$test" != "-t" ]] ; then
                 if [[ -s $combined_dir/swank_ids_to_delete_from_${solrname}_solr.ids ]] ; then
                     Verbose "Delete older records from Solr"
-                    aws s3 cp  $combined_dir/swank_ids_to_delete_from_${solrname}_solr.ids  ${delete_bucket}/swank_ids_to_delete_from_${solrname}_solr.ids  2>&1 | vlog "      "
+                    aws s3 cp  $combined_dir/swank_ids_to_delete_from_${solrname}_solr.ids  ${delete_bucket}/swank_ids_to_delete_from_${solrname}_solr.ids  2>> $DATADIR/aws_err.txt | vlog "      "
                 fi
 
                 if [[ "$previous_combined_file" == "" ]]; then previous_combined_file="/dev/null"; fi
@@ -150,7 +168,7 @@ if [[ "$latest_mrc_file" != "" && -s "$latest_mrc_file" ]] ; then
                 cmp -s "$latest_combined_file" "$previous_combined_file"
                 if [[ "$?" != "0" || "$force" == "-f" ]] ; then
                     Verbose "Uploading to S3 bucket for Virgo4"
-                    aws s3 cp  $latest_combined_file  ${update_bucket}/marc_record_export_edited_${DATE}.mrc 2>&1 | vlog "      "
+                    aws s3 cp  $latest_combined_file  ${update_bucket}/marc_record_export_edited_${DATE}.mrc 2>> $DATADIR/aws_err.txt | vlog "      "
                 fi
             else
                 if [[ -s $combined_dir/swank_ids_to_delete_from_${solrname}_solr.ids ]] ; then
@@ -168,3 +186,16 @@ if [[ "$latest_mrc_file" != "" && -s "$latest_mrc_file" ]] ; then
 else
     Verbose "No new file in dropbox, so nothing to do."
 fi
+
+if [[ -s $DATADIR/aws_err.txt ]] ; then
+    cat $DATADIR/aws_err.txt | vlog "      "
+    StatusAlert s3_error "detail=\"$(head -1 $DATADIR/aws_err.txt | tr -d '"')\""
+    exit 1
+fi
+
+if [[ "$latest_mrc_file" != "" && -s "$latest_mrc_file" ]] ; then
+    StatusOK records=$num_in_dump
+else
+    StatusOK note=nothing_new
+fi
+exit 0

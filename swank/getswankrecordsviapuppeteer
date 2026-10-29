@@ -33,22 +33,30 @@ if [[ "$force" == "-f" && -e $DATADIR/incoming/swank_nodejs_${DATE}.mrc ]] ; the
     rm -f $DATADIR/incoming/swank_nodejs_${DATE}.mrc
 fi
 
-# node swank_node_puppeteer.js -v --user=***REMOVED*** --pass=***REMOVED*** --dir=./data --csv=swank_nodejs_${DATE}.csv --marc=swank_nodejs_${DATE}.mrc
-
 rm -rf $DATADIR/.config/Sing*
+
+result_file=$DATADIR/scrape_result
 
 tries=0
 done=0
 if [[ ! -e  $DATADIR/incoming/swank_nodejs_${DATE}.csv || ! -e  $DATADIR/incoming/swank_nodejs_${DATE}.mrc ]] ; then
+    if [[ "$SWANK_USER" == "" || "$SWANK_PASSWORD" == "" ]] ; then
+        Echo "SWANK_USER and SWANK_PASSWORD environment variables must be set"
+        write_scrape_result $result_file config "SWANK_USER / SWANK_PASSWORD not set in the container environment"
+        exit 1
+    fi
     while [[ "$done" == 0 && "$tries" -lt 3 ]]; do
         #rm -rf $DATADIR/.config/Default/
+        # clear out partial/leftover downloads (but keep localStorageId.json)
+        rm -f $DATADIR/tmp/*.csv $DATADIR/tmp/*.mrc $DATADIR/tmp/*.crdownload
         Verbose "Running Puppeteer/NodeJS to login and trigger download"
-        node $SCRIPTDIR/swank_node_puppeteer.mjs -v --user=***REMOVED*** --pass=***REMOVED*** --dir=$DATADIR --csv=swank_nodejs_${DATE}.csv --marc=swank_nodejs_${DATE}.mrc | vlog "    nodeJS: "
+        node $SCRIPTDIR/swank_node_puppeteer.mjs -v --dir=$DATADIR --csv=swank_nodejs_${DATE}.csv --marc=swank_nodejs_${DATE}.mrc | vlog "    nodeJS: "
         returncode=${PIPESTATUS[0]}
         if [[ $returncode == 0 ]] ; then
             filesize=`du -b $DATADIR/incoming/swank_nodejs_${DATE}.mrc | cut -d $'\t' -f 1`
             Verbose "  Retrieved file size: $filesize"
             if [[ "$filesize" -lt 300000 ]]; then
+                write_scrape_result $result_file validate-marc "downloaded MARC file is only $filesize bytes"
                 let tries=$tries+1
                 if [[ $tries -lt 3 ]] ; then
                     Verbose "  File size too small, trying again"
@@ -60,8 +68,12 @@ if [[ ! -e  $DATADIR/incoming/swank_nodejs_${DATE}.csv || ! -e  $DATADIR/incomin
                 done=1
             fi
         else
-            Verbose "  Non-zero exit code from nodeJS script"
+            Verbose "  Non-zero exit code from nodeJS script: $(scrape_failure_summary $result_file)"
             let tries=$tries+1
+            if [[ "$(scrape_result_field $result_file step)" == "config" ]] ; then
+                Verbose "  Configuration problem, retrying won't help"
+                break
+            fi
             if [[ $tries -lt 3 ]] ; then
                 Verbose "  Non-zero exit code from nodeJS script, trying again"
             else

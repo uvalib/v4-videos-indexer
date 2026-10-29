@@ -1,320 +1,194 @@
+// Logs into the Swank Digital Campus admin site and exports, for all
+// licensed titles, the title-details CSV and the MARC records file.
+//
+// usage: node swank_node_puppeteer.mjs [-v] --dir=<datadir> --csv=<csv name> --marc=<mrc name>
+// Credentials come from the SWANK_USER / SWANK_PASSWORD environment
+// variables (--user= / --pass= still work for running by hand).
+//
+// Exits 0 on success. On failure exits 1 and leaves <datadir>/scrape_result
+// naming the step that failed, plus a screenshot/HTML snapshot under
+// <datadir>/screenshots. See ../common/scrape_helpers.mjs.
+
 import puppeteer from 'puppeteer';
 import fs from 'fs';
-import dateFormat from  'dateformat';
-
-var nowstr = dateFormat(new Date(), "yyyymmdd");
-
-function getArgs () {
-  const args = {};
-  process.argv
-    .slice(2, process.argv.length)
-    .forEach( arg => {
-      // long arg
-      if (arg.slice(0,2) === '--') {
-        const longArg = arg.split('=');
-        const longArgFlag = longArg[0].slice(2,longArg[0].length);
-        const longArgValue = longArg.length > 1 ? longArg[1] : true;
-        args[longArgFlag] = longArgValue;
-      }
-      // flags
-      else if (arg[0] === '-') {
-        const flags = arg.slice(1,arg.length).split('');
-        flags.forEach(flag => {
-          args[flag] = true;
-        });
-      }
-    });
-  return args;
-}
-
-// Dumps a URL/screenshot/HTML snapshot for post-mortem debugging.
-// Wrapped so a diagnostics failure never masks the real error.
-async function logDiagnostics(page, label) {
-  const stamp = Date.now();
-  try {
-    const url = page.url();
-    console.log(`DIAG[${label}] url = ${url}`);
-    await page.screenshot({ path: `${screenshot_dir}/diag_${label}_${stamp}.png` }).catch(() => {});
-    const html = await page.content().catch(() => '<content() failed>');
-    fs.writeFileSync(`${screenshot_dir}/diag_${label}_${stamp}.html`, html);
-    console.log(`DIAG[${label}] snapshot written: diag_${label}_${stamp}.{png,html}`);
-  } catch (diagErr) {
-    console.log(`DIAG[${label}] failed to collect diagnostics:`, diagErr.message);
-  }
-}
-
-const waitTillHTMLRendered = async (page, timeout = 30000) => {
-  const checkDurationMsecs = 1500;
-  const maxChecks = timeout / checkDurationMsecs;
-  let lastHTMLSize = 0;
-  let checkCounts = 1;
-  let countStableSizeIterations = 0;
-  const minStableSizeIterations = 3;
-  await new Promise(resolve => setTimeout(resolve, checkDurationMsecs));
-
-  while(checkCounts++ <= maxChecks){
-    let currentHTMLSize;
-    let bodyHTMLSize;
-
-    try {
-      let html = await page.content();
-      currentHTMLSize = html.length;
-
-      bodyHTMLSize = await page.evaluate(() => (document.body && document.body.innerHTML) ? document.body.innerHTML.length : 0);
-    } catch (transientErr) {
-      // "Execution context was destroyed" / null document.body both mean the
-      // page is mid-navigation (another redirect fired after the one Puppeteer
-      // already waited for). Treat this as "still loading", not fatal: reset
-      // the stability counter and try again on the next tick instead of throwing.
-      console.log(`waitTillHTMLRendered: transient error (${transientErr.message}), retrying...`);
-      countStableSizeIterations = 0;
-      lastHTMLSize = 0;
-      await new Promise(resolve => setTimeout(resolve, checkDurationMsecs));
-      continue;
-    }
-
-    console.log('last: ', lastHTMLSize, ' <> curr: ', currentHTMLSize, " body html size: ", bodyHTMLSize, " url: ", page.url());
-
-    if(lastHTMLSize != 0 && currentHTMLSize == lastHTMLSize)
-      countStableSizeIterations++;
-    else
-      countStableSizeIterations = 0; //reset the counter
-
-    if(countStableSizeIterations >= minStableSizeIterations) {
-      console.log("Page rendered fully..");
-      break;
-    }
-
-    lastHTMLSize = currentHTMLSize;
-    await new Promise(resolve => setTimeout(resolve, checkDurationMsecs));
-  }
-};
-
-function checkExistsWithTimeout(path, timeout, page, screenshotName) {
-  return new Promise((resolve, reject) => {
-    const timeoutTimerId = setTimeout(handleTimeout, timeout)
-    const interval = timeout / 6
-    var iterationCnt = 0
-    let intervalTimerId
-
-    function handleTimeout() {
-      clearTimeout(timeoutTimerId)
-
-      const error = new Error('path check timed out')
-      error.name = 'PATH_CHECK_TIMED_OUT'
-      reject(error)
-    }
-
-    function handleInterval() {
-      fs.access(path, (err) => {
-        if(err) {
-          if (verbose) console.log(`path ${path} doesn't exist yet ( try: ${iterationCnt++} ), waiting...`);
-          intervalTimerId = setTimeout(handleInterval, interval)
-          if (screenshotName != "")
-              page.screenshot({path: `${screenshot_dir}/${screenshotName}_${iterationCnt}.png`});
-        }
-        else {
-          if (verbose) console.log(`path ${path} exists - Yay!`);
-          clearTimeout(timeoutTimerId)
-          resolve(path)
-        }
-      })
-    }
-
-    intervalTimerId = setTimeout(handleInterval, interval)
-  })
-}
+import {
+  getArgs, createScrapeRun, runScrape, StepError, gotoPage, findElement, click,
+  submitLoginAndVerify, prepareDownloads,
+} from '../common/scrape_helpers.mjs';
 
 const args = getArgs();
-const verbose = args.v ? true : false;
-if (verbose) console.log(args);
-const creds = {
-    username: args.user,
-    password: args.pass
-};
 const datadir = args.dir ? args.dir : "./data";
-if (verbose) console.log(creds);
-const filename_csv = "digcampus_export.csv"; // args.csv;
-const filename_marc = `marc_record_export-${nowstr}.mrc`; // args.marc
+const run = createScrapeRun({ provider: 'swank', datadir, verbose: !!args.v, maxMinutes: 15 });
+
+const creds = {
+    username: process.env.SWANK_USER || args.user,
+    password: process.env.SWANK_PASSWORD || args.pass,
+};
 const save_dir = `${datadir}/tmp`;
-const screenshot_dir = `${datadir}/screenshots`;
 const save_as_csv = `${datadir}/incoming/${args.csv}`;
 const save_as_marc = `${datadir}/incoming/${args.marc}`;
 
-async function getRecords() {
-let browser, page; // hoisted so the catch block below can actually see & close them
-try {
-  browser = await puppeteer.launch({userDataDir:`${datadir}/.config`, headless: 'true', args: ['--no-sandbox', '--disable-setuid-sandbox']});
-  page = await browser.newPage();
-  await page.setViewport({width: 1200, height: 1000})
-  await Promise.all([
-    page.goto('https://digitalcampus-swankmp-net.proxy1.library.virginia.edu/admin/uva296909/dashboard'),
-    page.waitForNavigation({ waitUntil: 'networkidle0' }),
-  ]);
-  var localStorageVal = '';
-  // Check that the file exists locally
-  if(!fs.existsSync(`${save_dir}/localStorageId.json`)) {
-    console.log("localStorageId File not found, proceeding without it");
+const dashboardurl = 'https://digitalcampus-swankmp-net.proxy1.library.virginia.edu/admin/uva296909/dashboard';
+const loginurl = 'https://digitalcampus.swankmp.net/admin/uva296909/login';
+const contenturl = 'https://digitalcampus.swankmp.net/admin/uva296909/licensed-content-manager';
+
+const PASSWORD_FIELD = 'input[formcontrolname=password], input[type=password]';
+
+// Reads the "Selected: 479" counter shown next to the Content Manager title.
+async function selectedCount(page) {
+  return page.evaluate(() => {
+    const m = (document.body?.innerText || '').match(/Selected:\s*([\d,]+)/i);
+    return m ? parseInt(m[1].replace(/,/g, ''), 10) : 0;
+  }).catch(() => 0);
+}
+
+// Opens the "Export N Selected" dropdown and clicks the menu item matching
+// `itemTexts`. `legacySelector` is the old positional selector, kept as a
+// last resort.
+async function chooseExportMenuItem(page, itemTexts, legacySelector) {
+  const menuButton = await findElement(page, {
+    description: '"Export N Selected" menu button',
+    texts: ['export'],
+    within: 'button[aria-haspopup], button',
+    selectors: ['button[aria-haspopup="menu"]'],
+    preferText: true,
+  });
+  await click(menuButton, 'export menu button');
+  const item = await findElement(page, {
+    description: `"${itemTexts[0]}" menu item`,
+    texts: itemTexts,
+    within: '[role=menuitem], [role=menu] button, .mat-mdc-menu-panel button',
+    selectors: [legacySelector],
+    preferText: true,
+  });
+  return item;
+}
+
+runScrape(run, async () => {
+  if (!creds.username || !creds.password) {
+    throw new StepError('config', 'Swank credentials not provided (set SWANK_USER and SWANK_PASSWORD)');
   }
-  else { 
-    localStorageVal = fs.readFileSync(`${save_dir}/localStorageId.json`, 'UTF8');
-    localStorageVal = localStorageVal.replace(/\"/g, "");
-  }
-  if (localStorageVal != '') {
-    await page.evaluate(localStorageVal => {
-        localStorage.setItem('Player_Device_Id', localStorageVal);
-      }, localStorageVal);
-    if (verbose) console.log(`localStorageId set to ${localStorageVal}`);
-  }
+  if (!args.csv || !args.marc) throw new StepError('config', 'Both --csv= and --marc= must be given');
 
-  await Promise.all([
-    page.goto('https://digitalcampus.swankmp.net/admin/uva296909/login'),
-    page.waitForNavigation({ waitUntil: 'networkidle0' }),
-  ]);
+  const downloads = await run.step('launch-browser', async () => {
+    run.browser = await puppeteer.launch({userDataDir:`${datadir}/.config`, headless: 'true', args: ['--no-sandbox', '--disable-setuid-sandbox']});
+    run.page = await run.browser.newPage();
+    await run.page.setViewport({width: 1200, height: 1000});
+    return prepareDownloads(run.browser, save_dir);
+  });
+  const page = run.page;
 
-  await page.screenshot({path: `${screenshot_dir}/login.png`});
-  if (verbose) console.log('At login page, url =', page.url());
-
-  // Verify the login form is actually present before assuming so. If a
-  // stale session (persisted userDataDir) or an unexpected page got served
-  // instead, this fails fast with the real URL + a snapshot, instead of
-  // throwing an opaque "no selector" error deep in page.type().
-  const userField = await page.waitForSelector('input[formcontrolname=userName]', { timeout: 15000 }).catch(() => null);
-  if (!userField) {
-    await logDiagnostics(page, 'no_login_field');
-    throw new Error(`Login form not found at ${page.url()} - possibly already logged in (stale session) or served a different page. See diag_no_login_field snapshot.`);
-  }
-
-  await page.type('input[formcontrolname=userName]', creds.username);
-  await page.type('input[formcontrolname=password]', creds.password);
-
-  // Pair the click with a navigation wait: without this, the script raced
-  // straight into waitTillHTMLRendered before the post-login redirect
-  // landed, which is what caused "execution context destroyed" crashes in
-  // the kanopy script under the same pattern.
-  await Promise.all([
-    page.click('button[action=login]'),
-    page.waitForNavigation({ waitUntil: 'networkidle0' }).catch(() => {}),
-  ]);
-  await waitTillHTMLRendered(page);
-
-  await page.screenshot({path: `${screenshot_dir}/loggedin.png`});
-  if (verbose) console.log('At main admin page, url =', page.url());
-
-  await Promise.all([
-    page.goto('https://digitalcampus.swankmp.net/admin/uva296909/licensed-content-manager'),
-    page.waitForNavigation({ waitUntil: 'networkidle0' }).catch(() => {}),
-  ]);
-  await waitTillHTMLRendered(page);
-
-  await page.screenshot({path: `${screenshot_dir}/content.png`});
-  if (verbose) console.log('At content page, url =', page.url());
-
-  if (verbose) console.log('title checkbox id=mat-mdc-checkbox-0 clicked');
-  await Promise.all([
-    page.click('mat-checkbox[id=mat-mdc-checkbox-0]'),
-    await new Promise(resolve => setTimeout(resolve, 500))
-  ]);
-
-  await page.screenshot({path: `${screenshot_dir}/content2.png`});
-
-  if (verbose) console.log('menu dropdown button clicked');
-  await Promise.all([
-    page.click('button[aria-haspopup="menu"]'),
-    await new Promise(resolve => setTimeout(resolve, 500))
-  ]);
-  await page.screenshot({path: `${screenshot_dir}/content3.png`});
-
-  if (verbose) console.log(`saving CSV to dir ${save_dir}`);
-
-  const client = await page.target().createCDPSession()
-  await client.send('Page.setDownloadBehavior', {
-                behavior: 'allow',
-                downloadPath: `${save_dir}`,
-            });
-
-  // Download and wait for download
-  var filepath = `${save_dir}/${filename_csv}`;
-
-  if (verbose) console.log('menu button for titles info clicked'),
-  await Promise.all([
-    page.click('#mat-menu-panel-0 > div > button:nth-child(1)'),
-    checkExistsWithTimeout(filepath, 10000, page, "")
-  ]);
-  console.log('CSV file downloaded');
-
-  if (verbose) console.log('menu dropdown button clicked');
-  await Promise.all([
-    page.click('button[aria-haspopup="menu"]'),
-    await new Promise(resolve => setTimeout(resolve, 500))
-  ]);
-  await page.screenshot({path:  `${screenshot_dir}/content4.png`});
-
-  // Start download and wait for download to start
-  if (verbose) console.log('menu button for MARC records clicked');
-
-  if (verbose) console.log(`saving MARC file to dir ${save_dir}`);
-
-  var filepath = `${save_dir}/${filename_marc}`;
-  await Promise.all([
-    page.click('#mat-menu-panel-0 > div > button:nth-child(2)'),
-    checkExistsWithTimeout(filepath, 90000, page, "download_marc")
-  ]);
-  console.log('MARC file downloaded');
-
-  var filecsv = `${save_dir}/${filename_csv}`;
-  try {
-    fs.renameSync(filecsv, save_as_csv);
-    if (verbose) console.log(`File Renamed to ${save_as_csv}`);
-  } catch (err) {
-    console.log(err);
-    throw err;
-  }
-
-  var filemarc = `${save_dir}/${filename_marc}`;
-  try {
-    fs.renameSync(filemarc, save_as_marc);
-    if (verbose) console.log(`File Renamed to ${save_as_marc}`);
-  } catch (err) {
-    console.log(err);
-    throw err;
-  }
-
-  var ls = await page.evaluate(() => localStorage.Player_Device_Id);
-  if (verbose) console.log("fetching Player_Device_Id");
-  if (verbose) console.log(`${ls}`);
-  fs.writeFileSync(`${save_dir}/localStorageId.json`, ls);
-
-  // Properly close the browser
-  const pages = await browser.pages();
-  for (let i = 0; i < pages.length; i++) {
-    console.log("closing page");
-    await pages[i].close();
-    console.log("page closed");
-  }
-  console.log("all pages closed");
-  await browser.close();
-} // end try
-catch (err) {
-  console.log("Error caught!!:", err.message);
-  if (page != null) {
-    await logDiagnostics(page, 'fatal_error');
-  }
-  if (browser != null) {
-    const pages = await browser.pages();
-    for (let i = 0; i < pages.length; i++) {
-      console.log("closing page");
-      await pages[i].close();
-      console.log("page closed");
+  await run.step('restore-device-id', async () => {
+    await gotoPage(run, dashboardurl, { waitUntil: 'networkidle0' });
+    // Swank limits the number of registered "devices"; reuse the id from the
+    // previous run so each run doesn't register a new one.
+    const idFile = `${save_dir}/localStorageId.json`;
+    const localStorageVal = fs.existsSync(idFile) ? fs.readFileSync(idFile, 'UTF8').replace(/\"/g, "") : '';
+    if (localStorageVal != '') {
+      await page.evaluate(v => localStorage.setItem('Player_Device_Id', v), localStorageVal);
+      run.vlog(`localStorageId set to ${localStorageVal}`);
+    } else {
+      console.log("localStorageId File not found, proceeding without it");
     }
-    console.log("all pages closed");
-    await browser.close();
-  }
-  process.exitCode = 1;
-  console.log("Error re-thrown");
-  throw(err);
-} // end catch
-};
+  });
 
-getRecords().then( () => process.exit(0)).catch( (err) => { console.log(err); process.exit(1) });
+  await run.step('open-login-page', async () => {
+    await gotoPage(run, loginurl, { waitUntil: 'networkidle0' });
+    await run.screenshot('login');
+  });
 
+  await run.step('login', async () => {
+    const userField = await findElement(page, {
+      description: 'username field',
+      selectors: ['input[formcontrolname=userName]', 'input[autocomplete=username]', 'input[name*=user i]', 'input[type=email]'],
+    }).catch(() => null);
+    if (!userField) {
+      // The browser profile is persisted between runs, so an existing
+      // session can skip straight past the form. Carry on; the content
+      // page step below fails clearly if we're not actually logged in.
+      if (!page.url().includes('/login')) {
+        console.log(`No login form; already logged in? (at ${page.url()})`);
+        return;
+      }
+      throw new Error(`Login form not found at ${page.url()}`);
+    }
+    await userField.type(creds.username);
+    const password = await findElement(page, { description: 'password field', selectors: [PASSWORD_FIELD] });
+    await password.type(creds.password);
+    const loginButton = await findElement(page, {
+      description: 'login button',
+      selectors: ['button[action=login]', 'form button[type=submit]'],
+      texts: ['login', 'log in', 'sign in'],
+      exact: true,
+    });
+    await submitLoginAndVerify(run, loginButton, PASSWORD_FIELD);
+    await run.screenshot('loggedin');
+  });
+
+  await run.step('open-content-manager', async () => {
+    await gotoPage(run, contenturl, { waitUntil: 'networkidle0' });
+    await run.screenshot('content');
+    if (page.url().includes('/login')) throw new Error('Redirected back to the login page - not logged in');
+  });
+
+  await run.step('select-all-titles', async () => {
+    // The header checkbox of the titles table selects every title. It used
+    // to be found by its Angular-generated id (mat-mdc-checkbox-0), which
+    // changes whenever another checkbox is added to the page.
+    const selectAll = await findElement(page, {
+      description: 'select-all checkbox',
+      selectors: [
+        'thead mat-checkbox', 'mat-header-row mat-checkbox', '[role=columnheader] mat-checkbox', 'th mat-checkbox',
+        'mat-checkbox[id=mat-mdc-checkbox-0]', 'mat-checkbox',
+      ],
+      texts: ['select all'],
+      timeout: 45000,
+    });
+    if (await selectedCount(page) === 0) {
+      await click(selectAll, 'select-all checkbox');
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    if (await selectedCount(page) === 0) {
+      // Clicking the host element sometimes misses; try the inner input.
+      const input = await selectAll.$('input[type=checkbox]');
+      if (input) await input.evaluate(el => el.click());
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    const n = await selectedCount(page);
+    await run.screenshot('content2');
+    if (n === 0) throw new Error('Clicked the select-all checkbox but "Selected:" count is still 0');
+    console.log(`Selected ${n} titles`);
+  });
+
+  const csvPath = await run.step('export-title-details-csv', async () => {
+    const item = await chooseExportMenuItem(page, ['export title details', 'title details'], '#mat-menu-panel-0 > div > button:nth-child(1)');
+    await run.screenshot('content3');
+    const pending = downloads.expect({ description: 'Swank title details CSV', startTimeout: 30000, timeout: 60000 });
+    await click(item, 'Export Title Details');
+    return pending;
+  });
+  console.log(`CSV file downloaded: ${csvPath}`);
+
+  const marcPath = await run.step('export-marc-records', async () => {
+    const item = await chooseExportMenuItem(page, ['export marc records', 'marc records'], '#mat-menu-panel-0 > div > button:nth-child(2)');
+    await run.screenshot('content4');
+    const pending = downloads.expect({ description: 'Swank MARC export', startTimeout: 30000, timeout: 180000 });
+    await click(item, 'Export MARC Records');
+    return pending;
+  });
+  console.log(`MARC file downloaded: ${marcPath} (${fs.statSync(marcPath).size} bytes)`);
+
+  await run.step('save-files', async () => {
+    if (!csvPath.toLowerCase().endsWith('.csv')) throw new Error(`Title details download ${csvPath} is not a .csv`);
+    if (marcPath.toLowerCase().endsWith('.csv')) throw new Error(`MARC download ${marcPath} looks like a CSV - wrong menu item?`);
+    fs.mkdirSync(`${datadir}/incoming`, { recursive: true });
+    fs.renameSync(csvPath, save_as_csv);
+    console.log(`File Renamed to ${save_as_csv}`);
+    fs.renameSync(marcPath, save_as_marc);
+    console.log(`File Renamed to ${save_as_marc}`);
+
+    const ls = await page.evaluate(() => localStorage.Player_Device_Id);
+    run.vlog(`saving Player_Device_Id ${ls}`);
+    if (ls) fs.writeFileSync(`${save_dir}/localStorageId.json`, ls);
+  });
+});

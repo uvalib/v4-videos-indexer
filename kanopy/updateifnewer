@@ -65,12 +65,18 @@ diff_flag=-u
 fi
 download_failed=0
 download_succeeded=0
+scrape_detail=
+# If a new dump has fewer than this percent of the records currently in Solr,
+# assume the download is truncated: skip queuing deletes and raise an alert
+# rather than removing currently-valid records from the index.
+min_record_percent=${MIN_RECORD_PERCENT:-90}
 
 if [[ "$screenscrape" == "-s" ]] ; then
     Verbose "Calling script to download latest records from Website"
     $SCRIPTDIR/getkanopyrecordsviapuppeteer $verbose $force
     if [[ "$?" != "0" ]]; then
-        Echo "Script to fetch records returned ERROR, exiting"
+        scrape_detail=$(scrape_failure_summary $DATADIR/scrape_result)
+        Echo "Script to fetch records returned ERROR: $scrape_detail"
         Echo "Proceeding forward and checking for manually downloaded files"
         download_failed=1
     else
@@ -106,6 +112,11 @@ if [[ "$download_succeeded" == "0" ]] ; then
             if [[ $age_days -gt $max_age_days ]] ; then
                 Echo "ERROR: Latest manually-uploaded file '$KEY' in $BUCKET is $age_days days old (uploaded $last_modified, threshold is $max_age_days days)."
                 Echo "Refusing to auto-process stale fallback data - a forced reindex from this file would queue currently-valid records for deletion. Exiting"
+                if [[ "$download_failed" == "1" ]] ; then
+                    StatusAlert scrape_failed fallback=stale_s3_file s3_file_age_days=$age_days $scrape_detail
+                else
+                    StatusAlert stale_s3_file s3_file_age_days=$age_days
+                fi
                 exit 1
             else
                 Verbose "Manually-uploaded file '$KEY' is $age_days days old (within $max_age_days day threshold), proceeding"
@@ -135,16 +146,23 @@ if [[ "$download_succeeded" == "0" ]] ; then
             nothing_new=1
         else 
             Verbose "Downloaded file needs to be processed"
+            if [[ "$download_failed" == "1" ]] ; then
+                # Indexing can carry on from the manual upload, but the scrape is
+                # broken and needs fixing before the fallback file goes stale.
+                StatusAlert scrape_failed fallback=used_s3_file s3_file=$KEY $scrape_detail
+            fi
         fi
     fi
 
     if [[ "$KEY" == "" && "$download_failed" == "1" ]] ; then 
         Echo "No manually downloaded files found in AWS bucket, and auto-download failed,  Exiting"
+        StatusAlert scrape_failed fallback=none $scrape_detail
         exit 1
     fi
 
     if [[ "$nothing_new" == "1" && "$download_failed" == "1" ]] ; then 
         Echo "No new manually downloaded files found in AWS bucket, and auto-download failed,  Exiting"
+        StatusAlert scrape_failed fallback=already_processed $scrape_detail
         exit 1
     fi
 
@@ -160,12 +178,14 @@ if [[ "$latest_zip_file" != "" ]]; then
         Verbose "    Unpacking zipfile $froot"
         unzip -o -q "$DATADIR/incoming_zip/$froot" -d $DATADIR/incoming
     else
-        Echo "Error:  downloaded file not in .zip format -- it is: $(file -b $file)"
+        Echo "Error:  downloaded file not in .zip format -- it is: $(file -b "$latest_zip_file")"
+        StatusAlert bad_download "detail=\"downloaded file is not a zip archive\""
         exit 1
     fi
     mv  "$DATADIR/incoming_zip/$froot" $DATADIR/processed_zip
 else
     Echo "No new zip file downloaded, nothing to do.  Exiting"
+    StatusOK note=nothing_new
     exit 0
 fi
 
@@ -198,6 +218,16 @@ done
 
 java -cp "$marc4j_jar:$COMMONDIR/fix_boundwith.jar" AddFieldToRecord -c utf8 -f 988 -s a  $DATADIR/records/all_kanopy_records.mrc $DATADIR/kanopy_shadowed_map.map | $COMMONDIR/to_xml -edit $SCRIPTDIR/video_recs_map.properties | sed -e 's/^\([ ]*<marc:leader>.....\)...\(.*\)/\1ngm\2/' | $COMMONDIR/to_utf8 > $DATADIR/records/all_kanopy_records_edited.mrc
 
+num_records=`cat $DATADIR/records/all_kanopy_records_edited.mrc | $COMMONDIR/getrecord -id | wc -l`
+Verbose "    Transformed file contains $num_records records"
+if [[ "$num_records" == "0" ]] ; then
+    Echo "ERROR: transformed record file is empty, restoring previous records and exiting"
+    cp $DATADIR/records/all_kanopy_records_bak.mrc $DATADIR/records/all_kanopy_records.mrc
+    cp $DATADIR/records/all_kanopy_records_edited_bak.mrc $DATADIR/records/all_kanopy_records_edited.mrc
+    StatusAlert empty_download "detail=\"downloaded zip contained no MARC records\""
+    exit 1
+fi
+
 if [[ "$force" != "-f" ]] ; then
     # Handle incremental updates.
     Verbose "    Extracting changed records" 
@@ -216,7 +246,12 @@ if [[ "$force" != "-f" ]] ; then
 
     num_to_delete=`cat $DATADIR/updates_incoming/deletes_$DATE.del | wc -l`
     Verbose "Diff output contains $num_to_delete records for $corename"
-    if [[ "$num_current" != "$num_prevous" && "$num_to_delete" == "0" ]] ; then
+    if (( num_previous > 0 && (num_previous - num_to_delete) * 100 < num_previous * min_record_percent )) ; then
+        Echo "ERROR: $num_to_delete of $num_previous records would be deleted, which is more than allowed; not queuing deletes"
+        StatusAlert record_count_drop previous=$num_previous to_delete=$num_to_delete "detail=\"deletes skipped\""
+        cat /dev/null > $DATADIR/updates_incoming/deletes_$DATE.del
+    fi
+    if [[ "$num_current" != "$num_previous" && "$num_to_delete" == "0" ]] ; then
         diff $diff_flag $DATADIR/records/all_kanopy_records_bak.ids $DATADIR/records/all_kanopy_records.ids | vlog
     fi
 
@@ -278,6 +313,14 @@ do
             curl -s "$solrurl/select?fl=id&q=data_source_f%3A${corename}&rows=10000" | egrep '"id":' | sed -e 's/.*":"//' -e 's/".*$//' | sort  > $DATADIR/cur_ids_in_solr.ids
             diff ${diff_flag} $DATADIR/cur_ids_in_solr.ids $DATADIR/records/all_kanopy_records.ids | egrep '^-' | egrep -v "^---" | cut -c 2- > $DATADIR/records_to_delete_${corename}_${solrname}.ids
 
+            num_in_solr=`cat $DATADIR/cur_ids_in_solr.ids | wc -l`
+            num_in_dump=`cat $DATADIR/records/all_kanopy_records.ids | wc -l`
+            if (( num_in_solr > 0 && num_in_dump * 100 < num_in_solr * min_record_percent )) ; then
+                Echo "ERROR: new dump has $num_in_dump records but $solrname solr has $num_in_solr; not queuing deletes"
+                StatusAlert record_count_drop index=$solrname in_dump=$num_in_dump in_solr=$num_in_solr "detail=\"deletes skipped\""
+                cat /dev/null > $DATADIR/records_to_delete_${corename}_${solrname}.ids
+            fi
+
             if [ -s $DATADIR/records_to_delete_${corename}_${solrname}.ids ] ; then
                 Verbose "Some records in virgo solr that are not in the new dump of all records"
                 if [ "$test" != "-t" ]; then
@@ -302,6 +345,9 @@ exitcode=0
 if [[ -s $DATADIR/aws_err.txt ]] ; then
     exitcode=1
     cat $DATADIR/aws_err.txt | vlog "      "
+    StatusAlert s3_error "detail=\"$(head -1 $DATADIR/aws_err.txt | tr -d '"')\""
+else
+    StatusOK records=$num_records
 fi
 
 Verbose "    Done updating core $corename"

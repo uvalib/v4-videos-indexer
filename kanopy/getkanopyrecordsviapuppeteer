@@ -40,16 +40,23 @@ fi
 
 rm -f $DATADIR/.config/Sing*
 
+result_file=$DATADIR/scrape_result
+
 tries=0
 done=0
 if [[ ! -e $DATADIR/incoming_zip/$kanopy_filename && ! -e $DATADIR/processed_zip/$kanopy_filename ]] ; then
-    while [[ "$done" == 0 && "$tries" < 3 ]]; do
+    if [[ "$KANOPY_USER" == "" || "$KANOPY_PASSWORD" == "" ]] ; then
+        Echo "KANOPY_USER and KANOPY_PASSWORD environment variables must be set"
+        write_scrape_result $result_file config "KANOPY_USER / KANOPY_PASSWORD not set in the container environment"
+        exit 1
+    fi
+    while [[ "$done" == 0 && "$tries" -lt 3 ]]; do
         rm -rf $DATADIR/.config/Default/
         rm -f $DATADIR/tmp/*
         rm -f $DATADIR/incoming_zip/$kanopy_filename
 
         Verbose "Running Puppeteer/NodeJS to login and trigger download"
-        node $SCRIPTDIR/kanopy_node_puppeteer.mjs -v --user=***REMOVED*** --pass=***REMOVED*** --dir=$DATADIR --file=$kanopy_filename | vlog "    nodeJS: "
+        node $SCRIPTDIR/kanopy_node_puppeteer.mjs -v --dir=$DATADIR --file=$kanopy_filename | vlog "    nodeJS: "
         returncode=${PIPESTATUS[0]}
         if [[ $returncode == 0 ]] ; then
             unzip -t -qq $DATADIR/incoming_zip/$kanopy_filename 2>&1 | vlog "    unzip: "
@@ -60,6 +67,7 @@ if [[ ! -e $DATADIR/incoming_zip/$kanopy_filename && ! -e $DATADIR/processed_zip
                 Verbose "  File is a valid ZIP archive.  moving on."
                 done=1
             else
+                write_scrape_result $result_file validate-zip "downloaded file is not a valid zip archive"
                 let tries=$tries+1
                 if [[ $tries -lt 3 ]] ; then
                     Verbose "  ZIP file not valid, trying again"
@@ -68,8 +76,12 @@ if [[ ! -e $DATADIR/incoming_zip/$kanopy_filename && ! -e $DATADIR/processed_zip
                 fi
             fi
         else
-            Verbose "  Non-zero exit code from nodeJS script"
+            Verbose "  Non-zero exit code from nodeJS script: $(scrape_failure_summary $result_file)"
             let tries=$tries+1
+            if [[ "$(scrape_result_field $result_file step)" == "config" ]] ; then
+                Verbose "  Configuration problem, retrying won't help"
+                break
+            fi
             if [[ $tries -lt 3 ]] ; then
                 Verbose "  Non-zero exit code from nodeJS script, trying again"
             else
@@ -84,4 +96,3 @@ fi
 
 if [[ "$done" == 1 ]] ; then exit_code=0; else exit_code=1; fi;
 exit $exit_code
-
