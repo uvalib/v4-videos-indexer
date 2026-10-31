@@ -98,6 +98,28 @@ function StatusAlert ()
     echo "$corename: VIDEO_INDEXER_ALERT provider=$corename reason=$reason $*"
 }
 
+# Upload one file to S3.  Checks aws's exit status rather than relying only on
+# aws_err.txt being non-empty, since a failure to open aws_err.txt itself (for
+# instance a permissions problem) means aws never runs and nothing is logged.
+# Failures are counted in s3_failures, and the first is described in
+# s3_failure_detail, so the caller can raise one s3_error alert at the end.
+# usage: s3_upload <source file> <destination url>
+s3_failures=0
+s3_failure_detail=
+function s3_upload ()
+{
+    aws s3 cp "$1" "$2" 2>> $DATADIR/aws_err.txt | vlog "      "
+    local status=${PIPESTATUS[0]}
+    if [[ "$status" != "0" ]] ; then
+        Echo "ERROR: upload of $1 to $2 failed with status $status"
+        let s3_failures=$s3_failures+1
+        if [[ "$s3_failure_detail" == "" ]] ; then
+            s3_failure_detail="upload of $(basename $1) to $2 failed with status $status"
+        fi
+    fi
+    return $status
+}
+
 # The puppeteer scripts leave a key=value scrape_result file in their data
 # directory saying how far they got.  usage: scrape_result_field <file> <key>
 function scrape_result_field ()

@@ -160,7 +160,7 @@ if [[ "$latest_mrc_file" != "" && -s "$latest_mrc_file" ]] ; then
             if [[ "$test" != "-t" ]] ; then
                 if [[ -s $combined_dir/swank_ids_to_delete_from_${solrname}_solr.ids ]] ; then
                     Verbose "Delete older records from Solr"
-                    aws s3 cp  $combined_dir/swank_ids_to_delete_from_${solrname}_solr.ids  ${delete_bucket}/swank_ids_to_delete_from_${solrname}_solr.ids  2>> $DATADIR/aws_err.txt | vlog "      "
+                    s3_upload $combined_dir/swank_ids_to_delete_from_${solrname}_solr.ids ${delete_bucket}/swank_ids_to_delete_from_${solrname}_solr.ids
                 fi
 
                 if [[ "$previous_combined_file" == "" ]]; then previous_combined_file="/dev/null"; fi
@@ -168,7 +168,7 @@ if [[ "$latest_mrc_file" != "" && -s "$latest_mrc_file" ]] ; then
                 cmp -s "$latest_combined_file" "$previous_combined_file"
                 if [[ "$?" != "0" || "$force" == "-f" ]] ; then
                     Verbose "Uploading to S3 bucket for Virgo4"
-                    aws s3 cp  $latest_combined_file  ${update_bucket}/marc_record_export_edited_${DATE}.mrc 2>> $DATADIR/aws_err.txt | vlog "      "
+                    s3_upload $latest_combined_file ${update_bucket}/marc_record_export_edited_${DATE}.mrc
                 fi
             else
                 if [[ -s $combined_dir/swank_ids_to_delete_from_${solrname}_solr.ids ]] ; then
@@ -187,9 +187,10 @@ else
     Verbose "No new file in dropbox, so nothing to do."
 fi
 
-if [[ -s $DATADIR/aws_err.txt ]] ; then
-    cat $DATADIR/aws_err.txt | vlog "      "
-    StatusAlert s3_error "detail=\"$(head -1 $DATADIR/aws_err.txt | tr -d '"')\""
+if [[ "$s3_failures" -gt 0 || -s $DATADIR/aws_err.txt ]] ; then
+    cat $DATADIR/aws_err.txt 2>/dev/null | vlog "      "
+    detail=${s3_failure_detail:-$(head -1 $DATADIR/aws_err.txt | tr -d '"')}
+    StatusAlert s3_error failed_uploads=$s3_failures "detail=\"$detail\""
     exit 1
 fi
 
